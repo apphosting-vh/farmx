@@ -6,8 +6,9 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#27ae60",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/farmx/icon-192.png",
@@ -22,22 +23,5 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["business", "productivity", "finance"],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "Attendance",
-      "short_name": "Attendance",
-      "description": "Mark worker attendance",
-      "url": "/?view=attendance",
-      "icons": [{ "src": "/farmx/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Payments",
-      "short_name": "Payments",
-      "description": "Record payments",
-      "url": "/?view=payments",
-      "icons": [{ "src": "/farmx/icon-192.png", "sizes": "192x192" }]
-    }
-  ]
+  "categories": ["business", "productivity", "finance"]
 }

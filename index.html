@@ -3,11 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- Android Chrome - Critical for standalone mode -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#27ae60">
-  <meta name="description" content="One Stop Solution for Farming Expense Management">
+  
+  <!-- iOS Safari -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Farm Manager">
+  
+  <!-- Windows -->
+  <meta name="msapplication-TileColor" content="#27ae60">
+  <meta name="msapplication-tap-highlight" content="no">
+  
+  <!-- Description -->
+  <meta name="description" content="One Stop Solution for Farming Expense Management">
   
   <title>Farm Manager - One Stop Solution for Farming Expense Management</title>
   
@@ -34,8 +45,20 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       overflow: hidden;
+      /* Prevent pull-to-refresh on Android */
+      overscroll-behavior-y: contain;
+      /* Prevent text selection for native feel */
+      -webkit-user-select: none;
+      user-select: none;
     }
-    #root { height: 100vh; width: 100vw; overflow: auto; }
+    #root { 
+      height: 100vh; 
+      width: 100vw; 
+      overflow: auto;
+      /* Re-enable text selection in app content */
+      -webkit-user-select: text;
+      user-select: text;
+    }
     #loading {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
@@ -88,13 +111,13 @@ function FarmWageManager() {
   const themes = {
     default: {
       name: 'Farm Fresh',
-       primary: '#006064',
-      secondary: '#00838f',
-      accent: '#4dd0e1',
-      background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)',
+      primary: '#8b6f47',
+      secondary: '#5d4e37',
+      accent: '#d4a574',
+      background: 'linear-gradient(135deg, #f5e6d3 0%, #d4a574 100%)',
       cardBg: 'white',
-      textPrimary: '#263238',
-      textSecondary: '#546e7a',
+      textPrimary: '#2c3e50',
+      textSecondary: '#7f8c8d',
       success: '#1e7d32', // Dark green for full day
       warning: '#f9a825', // Dark yellow for half day
       danger: '#b71c1c', // Blood red for absent
@@ -7261,6 +7284,26 @@ if (typeof ReactDOM !== 'undefined' && document.getElementById('root')) {
       const loading = document.getElementById('loading');
       if (loading) {
         loading.innerHTML = '<h1>⚠️ Error Loading App</h1><p>Please refresh the page</p>';
+      }
+    });
+    
+    // Prevent default pull-to-refresh on Android Chrome
+    document.body.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+    
+    // Detect if running as standalone app
+    window.addEventListener('load', () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                          window.navigator.standalone || 
+                          document.referrer.includes('android-app://');
+      
+      if (isStandalone) {
+        console.log('✅ Running as standalone PWA');
+      } else {
+        console.log('ℹ️ Running in browser. Install via "Add to Home screen" for full-screen experience.');
       }
     });
   </script>
