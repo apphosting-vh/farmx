@@ -1,0 +1,43 @@
+{
+  "name": "Farm Manager",
+  "short_name": "Farm Manager",
+  "description": "One Stop Solution for Farming Expense Management",
+  "start_url": "/farmx/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#27ae60",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/farmx/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/farmx/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "finance"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Attendance",
+      "short_name": "Attendance",
+      "description": "Mark worker attendance",
+      "url": "/?view=attendance",
+      "icons": [{ "src": "/farmx/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Payments",
+      "short_name": "Payments",
+      "description": "Record payments",
+      "url": "/?view=payments",
+      "icons": [{ "src": "/farmx/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
