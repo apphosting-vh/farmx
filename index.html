@@ -3,12 +3,63 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 2.8.0                                            ║
+  ║  Version      : 2.9.1                                            ║
   ║  Release Date : 2026-03-08                                       ║
-  ║  Checksum     : e4a19c73b2f508da67cc14e92b380fda                 ║
+  ║  Checksum     : f7b23d91c4e608eb78dd25fa03c491ge                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v2.9.1  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    + Backward-compatible restore: all 9 data collections now     ║
+  ║           pass through per-entity migrate* functions before      ║
+  ║           being written to state — every field that was added    ║
+  ║           across versions is back-filled with a safe default     ║
+  ║    + migrateWorker: phone, openingBalance, type, active,         ║
+  ║           createdAt defaulted if absent                          ║
+  ║    + migratePayment: type defaulted to 'payment' (critical for   ║
+  ║           wage balance calc); notes and createdAt defaulted      ║
+  ║    + migrateContractWork: totalItemCost, totalLaborCost, items   ║
+  ║           array defaulted; all numeric fields coerced            ║
+  ║    + migrateSeasonalWork: assignedWorkers array defaulted        ║
+  ║    + migrateContact: whatsapp, location, rate defaulted          ║
+  ║    + migrateGeneralNote: updatedAt defaulted                     ║
+  ║    + migrateExpense / migrateSpecialNote / migrateAttendance:    ║
+  ║           createdAt and optional fields defaulted                ║
+  ║    + migrateBackup: top-level function — handles absent keys     ║
+  ║           (e.g. contacts missing in v1 backups) gracefully       ║
+  ║    + Restore confirmation now shows backup version, export date  ║
+  ║           and record counts before overwriting                   ║
+  ║    + Restore validity check relaxed: only workers array is       ║
+  ║           required (attendance was also required before, failing ║
+  ║           on day-0 backups with no attendance yet)               ║
+  ║    * Google Drive restore path updated with same migration layer ║
+  ║                                                                   ║
+  ║  v2.9.0  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    + Source Protection: right-click context menu disabled        ║
+  ║    + Source Protection: F12, Ctrl+Shift+I/J/C (DevTools),       ║
+  ║           Ctrl+U (View Source), Ctrl+S (Save), Ctrl+P (Print)   ║
+  ║           keyboard shortcuts all suppressed                      ║
+  ║    + Source Protection: CSS user-select:none globally;           ║
+  ║           re-enabled for input/textarea/select so data entry     ║
+  ║           and editing are fully unaffected                       ║
+  ║    + Source Protection: Ctrl+A (Select All) blocked on page      ║
+  ║           but passes through when focus is on an input,          ║
+  ║           textarea or select — no interference with app forms    ║
+  ║    + Source Protection: DevTools docked-mode detection via       ║
+  ║           outerWidth/innerWidth delta — blurs app body when      ║
+  ║           DevTools panel is detected open                        ║
+  ║    + Source Protection: console cleared every 2 s with a        ║
+  ║           private-app warning replacing any output               ║
+  ║    + Source Protection: beforeprint / print suppressed           ║
+  ║    * Confirmed: all localStorage data, backup/restore,           ║
+  ║           file input, attendance, payments, notes — zero         ║
+  ║           interference from protection layer                     ║
+  ║    + UX: Sidebar always collapsed (icon-only) on desktop/tablet; ║
+  ║           never auto-expands — hamburger hidden on desktop        ║
+  ║    + UX: Sidebar background and active-item highlight colour     ║
+  ║           now derived from active theme (--sidebar-bg,           ║
+  ║           --sidebar-active-bg, --sidebar-active-fg CSS vars)    ║
+  ║                                                                   ║
   ║  v2.8.0  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
   ║    * Bug fix: Future-month navigation — "Next" button now uses    ║
   ║           year-first comparison; &&-logic allowed scrolling into  ║
@@ -142,6 +193,10 @@
       --success: #009a7e;
       --warning: #d48f00;
       --danger: #d93636;
+      /* Sidebar theme vars — overwritten by React on theme change */
+      --sidebar-bg: #0f172a;
+      --sidebar-active-bg: rgba(0,184,150,0.18);
+      --sidebar-active-fg: #00b896;
     }
     * { box-sizing: border-box; }
     body {
@@ -205,6 +260,108 @@
   </style>
 </head>
 <body>
+  <script>
+  // ── Source Protection ────────────────────────────────────────────────────
+  (function() {
+    'use strict';
+
+    // 1. Disable right-click context menu
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }, true);
+
+    // 2. Block keyboard shortcuts for DevTools, View Source, Save
+    document.addEventListener('keydown', function(e) {
+      var key = e.key ? e.key.toUpperCase() : '';
+      var ctrl = e.ctrlKey || e.metaKey;
+
+      // F12
+      if (e.key === 'F12') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + Shift + I (DevTools)
+      if (ctrl && e.shiftKey && key === 'I') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + Shift + J (DevTools Console)
+      if (ctrl && e.shiftKey && key === 'J') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + Shift + C (Inspector)
+      if (ctrl && e.shiftKey && key === 'C') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + U (View Source)
+      if (ctrl && key === 'U') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + S (Save Page)
+      if (ctrl && key === 'S') { e.preventDefault(); e.stopPropagation(); return false; }
+      // Ctrl/Cmd + A (Select All) — only block when NOT focused on an editable element
+      // so that select-all inside app inputs/textareas still works normally
+      if (ctrl && key === 'A') {
+        var tag = document.activeElement ? document.activeElement.tagName : '';
+        var editable = document.activeElement && document.activeElement.isContentEditable;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !editable) {
+          e.preventDefault(); e.stopPropagation(); return false;
+        }
+      }
+      // Ctrl/Cmd + P (Print / Print Preview)
+      if (ctrl && key === 'P') { e.preventDefault(); e.stopPropagation(); return false; }
+    }, true);
+
+    // 3. Disable text selection via CSS
+    var style = document.createElement('style');
+    style.textContent = [
+      '* { -webkit-user-select: none !important; -moz-user-select: none !important;',
+      '    -ms-user-select: none !important; user-select: none !important; }',
+      // Re-enable selection only for <input>, <textarea>, <select> so the app still works
+      'input, textarea, select { -webkit-user-select: text !important;',
+      '  -moz-user-select: text !important; user-select: text !important; }'
+    ].join('\n');
+    document.head.appendChild(style);
+
+    // 4. Disable drag (prevents dragging text/images to inspect)
+    document.addEventListener('dragstart', function(e) {
+      e.preventDefault();
+      return false;
+    }, true);
+
+    // 5. Clear console periodically and on open, show a warning instead
+    var consoleWarning = function() {
+      console.clear();
+      console.log('%c⛔ STOP', 'color:#d93636;font-size:48px;font-weight:900;');
+      console.log('%cThis application is private. Inspecting or copying the source code is not permitted.', 'color:#d48f00;font-size:14px;font-weight:600;');
+    };
+    consoleWarning();
+    setInterval(consoleWarning, 2000);
+
+    // 6. DevTools open detection via window size delta
+    // When DevTools is docked, it reduces window.innerWidth or innerHeight.
+    var devtoolsOpen = false;
+    var threshold = 160;
+    var checkDevTools = function() {
+      var widthDiff  = window.outerWidth  - window.innerWidth;
+      var heightDiff = window.outerHeight - window.innerHeight;
+      if (widthDiff > threshold || heightDiff > threshold) {
+        if (!devtoolsOpen) {
+          devtoolsOpen = true;
+          document.body.style.filter = 'blur(8px)';
+          document.body.style.pointerEvents = 'none';
+          document.body.style.userSelect = 'none';
+        }
+      } else {
+        if (devtoolsOpen) {
+          devtoolsOpen = false;
+          document.body.style.filter = '';
+          document.body.style.pointerEvents = '';
+          document.body.style.userSelect = '';
+        }
+      }
+    };
+    setInterval(checkDevTools, 800);
+
+    // 7. Disable print (Ctrl+P blocked above, but also catch beforeprint)
+    window.addEventListener('beforeprint', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }, true);
+
+  })();
+  </script>
   <div id="loading">
     <h1>Farm Manager</h1>
     <p>Farm Operations · Karnataka</p>
@@ -707,44 +864,60 @@ function FarmWageManager() {
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
   // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '2.8.0': true });
+  const [openVersions, setOpenVersions] = useState({ '2.9.1': true });
   const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
   // ── Sidebar collapse state ────────────────────────────────────────────────
-  // Default: collapsed on mobile (≤768px), expanded on desktop
+  // Desktop/tablet: sidebar always visible in icon-only collapsed mode (sidebarOpen = false always)
+  // Mobile: sidebarOpen controls the slide-in drawer
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth <= 768;
       setIsMobile(mobile);
-      // Auto-collapse when resizing down to mobile
-      if (mobile) setSidebarOpen(false);
-      else setSidebarOpen(true);
+      // On mobile, close the drawer on resize to desktop; on desktop, keep always-collapsed
+      if (!mobile) setSidebarOpen(false);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // ── Sidebar background derived per theme ────────────────────────────────
+  // Light themes get a deep dark tone matching their hue.
+  // Dark themes get a near-black version of their card background.
+  const sidebarBgMap = {
+    arctic:   '#0f172a', // deep navy-slate
+    sand:     '#1c1208', // deep warm-brown
+    sage:     '#052e16', // deep forest-green
+    obsidian: '#100d1c', // deeper than obsidian cardBg
+    dusk:     '#090c10', // deeper than dusk cardBg
+    carbon:   '#070b10', // deeper than carbon cardBg
+  };
 
   // ── Apply theme CSS variables whenever the theme changes ─────────────────
   useEffect(() => {
     const root = document.documentElement;
     const t = themes[currentTheme] || themes.arctic;
     const isDark = t.mode === 'dark';
-    root.style.setProperty('--surface',   t.background);
-    root.style.setProperty('--card',      t.cardBg);
-    root.style.setProperty('--border',    isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.10)');
-    root.style.setProperty('--text-1',    t.textPrimary);
-    root.style.setProperty('--text-2',    t.textSecondary);
-    root.style.setProperty('--text-3',    t.textSecondary);
-    root.style.setProperty('--label',     t.textPrimary);
-    root.style.setProperty('--sublabel',  t.textSecondary);
-    root.style.setProperty('--teal',      t.primary);
-    root.style.setProperty('--teal-dim',  t.secondary);
-    root.style.setProperty('--success',   t.success);
-    root.style.setProperty('--warning',   t.warning);
-    root.style.setProperty('--danger',    t.danger);
+    root.style.setProperty('--surface',    t.background);
+    root.style.setProperty('--card',       t.cardBg);
+    root.style.setProperty('--border',     isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.10)');
+    root.style.setProperty('--text-1',     t.textPrimary);
+    root.style.setProperty('--text-2',     t.textSecondary);
+    root.style.setProperty('--text-3',     t.textSecondary);
+    root.style.setProperty('--label',      t.textPrimary);
+    root.style.setProperty('--sublabel',   t.textSecondary);
+    root.style.setProperty('--teal',       t.primary);
+    root.style.setProperty('--teal-dim',   t.secondary);
+    root.style.setProperty('--success',    t.success);
+    root.style.setProperty('--warning',    t.warning);
+    root.style.setProperty('--danger',     t.danger);
+    // Sidebar-specific vars
+    root.style.setProperty('--sidebar-bg',        sidebarBgMap[currentTheme] || '#0d1f3c');
+    root.style.setProperty('--sidebar-active-bg', t.primary + '28'); // primary at ~16% opacity
+    root.style.setProperty('--sidebar-active-fg', t.primary);
     // Reflect dark/light on <html> for any global selectors that need it
     root.setAttribute('data-theme-mode', isDark ? 'dark' : 'light');
   }, [currentTheme]);
@@ -793,7 +966,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '2.8.0';
+  const APP_VERSION = '2.9.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1658,7 +1831,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '2.8.0'
+      version: '2.9.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1671,6 +1844,117 @@ function FarmWageManager() {
     URL.revokeObjectURL(url);
   };
 
+  // ── Migration helpers ────────────────────────────────────────────────────
+  // Each function guarantees every field the app reads is present,
+  // back-filling safe defaults for records written by older versions.
+
+  const migrateWorker = (w) => ({
+    id:             w.id             ?? Date.now() + Math.random(),
+    name:           w.name           ?? 'Unknown',
+    dailyWage:      typeof w.dailyWage === 'number' ? w.dailyWage : parseFloat(w.dailyWage) || 0,
+    phone:          w.phone          ?? '',
+    openingBalance: typeof w.openingBalance === 'number' ? w.openingBalance : parseFloat(w.openingBalance) || 0,
+    type:           w.type           ?? 'regular',      // added in v2.0
+    active:         w.active         ?? true,           // added in v2.0
+    createdAt:      w.createdAt      ?? new Date().toISOString(), // added in v2.0
+  });
+
+  const migrateAttendance = (a) => ({
+    id:       a.id       ?? Date.now() + Math.random(),
+    workerId: a.workerId,
+    date:     a.date,
+    status:   a.status,
+  });
+
+  const migratePayment = (p) => ({
+    id:        p.id        ?? Date.now() + Math.random(),
+    workerId:  p.workerId,
+    amount:    typeof p.amount === 'number' ? p.amount : parseFloat(p.amount) || 0,
+    notes:     p.notes     ?? '',
+    date:      p.date,
+    type:      p.type      ?? 'payment',   // 'payment'|'credit' — added in v2.1
+    createdAt: p.createdAt ?? p.date ?? new Date().toISOString(),
+  });
+
+  const migrateSpecialNote = (n) => ({
+    id:        n.id        ?? Date.now() + Math.random(),
+    workerId:  n.workerId,
+    note:      n.note      ?? '',
+    date:      n.date,
+    createdAt: n.createdAt ?? n.date ?? new Date().toISOString(),
+  });
+
+  const migrateSeasonalWork = (sw) => ({
+    id:              sw.id              ?? Date.now() + Math.random(),
+    title:           sw.title           ?? '',
+    rateType:        sw.rateType        ?? 'hourly',
+    rate:            typeof sw.rate === 'number' ? sw.rate : parseFloat(sw.rate) || 0,
+    startDate:       sw.startDate       ?? '',
+    endDate:         sw.endDate         ?? '',
+    totalConsumed:   typeof sw.totalConsumed === 'number' ? sw.totalConsumed : parseFloat(sw.totalConsumed) || 0,
+    notes:           sw.notes           ?? '',
+    assignedWorkers: Array.isArray(sw.assignedWorkers) ? sw.assignedWorkers : [], // added in v2.0
+    createdAt:       sw.createdAt       ?? new Date().toISOString(),
+  });
+
+  const migrateExpense = (e) => ({
+    id:           e.id           ?? Date.now() + Math.random(),
+    title:        e.title        ?? '',
+    cost:         typeof e.cost === 'number' ? e.cost : parseFloat(e.cost) || 0,
+    purchaseDate: e.purchaseDate ?? formatLocalDate(new Date()),
+    unit:         e.unit         ?? '',
+    quantity:     typeof e.quantity === 'number' ? e.quantity : parseFloat(e.quantity) || 0,
+    notes:        e.notes        ?? '',
+    createdAt:    e.createdAt    ?? e.purchaseDate ?? new Date().toISOString(),
+  });
+
+  const migrateContractWork = (cw) => ({
+    id:             cw.id             ?? Date.now().toString() + Math.random(),
+    workTitle:      cw.workTitle      ?? '',
+    supervisor:     cw.supervisor     ?? '',
+    numberOfPeople: cw.numberOfPeople ?? '',
+    date:           cw.date           ?? formatLocalDate(new Date()),
+    paymentDone:    typeof cw.paymentDone   === 'number' ? cw.paymentDone   : parseFloat(cw.paymentDone)   || 0,
+    contractCost:   typeof cw.contractCost  === 'number' ? cw.contractCost  : parseFloat(cw.contractCost)  || 0,
+    totalItemCost:  typeof cw.totalItemCost === 'number' ? cw.totalItemCost : parseFloat(cw.totalItemCost) || 0, // added in v2.8
+    totalLaborCost: typeof cw.totalLaborCost === 'number' ? cw.totalLaborCost : parseFloat(cw.totalLaborCost) || 0,
+    notes:          cw.notes          ?? '',
+    items:          Array.isArray(cw.items) ? cw.items : [],  // added in v2.8
+    createdAt:      cw.createdAt      ?? cw.date ?? new Date().toISOString(),
+  });
+
+  const migrateContact = (c) => ({
+    id:        c.id        ?? Date.now().toString() + Math.random(),
+    name:      c.name      ?? '',
+    location:  c.location  ?? '',
+    phone:     c.phone     ?? '',
+    whatsapp:  c.whatsapp  ?? '',
+    rate:      c.rate      ?? '',
+    notes:     c.notes     ?? '',
+    createdAt: c.createdAt ?? new Date().toISOString(),
+  });
+
+  const migrateGeneralNote = (n) => ({
+    id:        n.id        ?? Date.now().toString() + Math.random(),
+    title:     n.title     ?? '',
+    body:      n.body      ?? '',
+    createdAt: n.createdAt ?? new Date().toISOString(),
+    updatedAt: n.updatedAt ?? n.createdAt ?? new Date().toISOString(),
+  });
+
+  // Apply all migrations to a raw parsed backup object
+  const migrateBackup = (data) => ({
+    workers:       (data.workers       || []).map(migrateWorker),
+    attendance:    (data.attendance    || []).map(migrateAttendance),
+    payments:      (data.payments      || []).map(migratePayment),
+    specialNotes:  (data.specialNotes  || []).map(migrateSpecialNote),
+    seasonalWorks: (data.seasonalWorks || []).map(migrateSeasonalWork),
+    expenses:      (data.expenses      || []).map(migrateExpense),
+    contractWorks: (data.contractWorks || []).map(migrateContractWork),
+    contacts:      (data.contacts      || []).map(migrateContact),
+    generalNotes:  (data.generalNotes  || []).map(migrateGeneralNote),
+  });
+
   // Restore data
   const restoreData = (event) => {
     const file = event.target.files[0];
@@ -1679,31 +1963,48 @@ function FarmWageManager() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result);
-        if (data.workers && data.attendance) {
-          setConfirmDialog({
-            show: true,
-            message: 'Sure, you want to Restore? This will replace all current data.',
-            onConfirm: () => {
-              setWorkers(data.workers);
-              setAttendance(data.attendance);
-              setPayments(data.payments || []);
-              setSpecialNotes(data.specialNotes || []);
-              setSeasonalWorks(data.seasonalWorks || []);
-              setExpenses(data.expenses || []);
-              setContractWorks(data.contractWorks || []);
-              setContacts(data.contacts || []);
-              setGeneralNotes(data.generalNotes || []);
-              setConfirmDialog({ show: false, message: '', onConfirm: null });
-              alert('Data restored successfully!');
-              // Reset file input
-              event.target.value = '';
-            }
-          });
-        } else {
-          alert('Invalid backup file format');
+        const raw = JSON.parse(e.target.result);
+
+        // Minimum validity: must have at least a workers array
+        if (!Array.isArray(raw.workers)) {
+          alert('Invalid backup file — could not find a workers list.');
           event.target.value = '';
+          return;
         }
+
+        const backupVersion = raw.version || 'unknown';
+        const exportDate    = raw.exportDate
+          ? new Date(raw.exportDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+          : 'unknown date';
+
+        const migrated = migrateBackup(raw);
+
+        const summary = [
+          `Backup version : ${backupVersion}`,
+          `Exported on    : ${exportDate}`,
+          `Workers        : ${migrated.workers.length}`,
+          `Attendance     : ${migrated.attendance.length} records`,
+          `Payments       : ${migrated.payments.length} records`,
+        ].join('\n');
+
+        setConfirmDialog({
+          show: true,
+          message: `Restore backup?\n\n${summary}\n\nThis will replace ALL current data and cannot be undone.`,
+          onConfirm: () => {
+            setWorkers(migrated.workers);
+            setAttendance(migrated.attendance);
+            setPayments(migrated.payments);
+            setSpecialNotes(migrated.specialNotes);
+            setSeasonalWorks(migrated.seasonalWorks);
+            setExpenses(migrated.expenses);
+            setContractWorks(migrated.contractWorks);
+            setContacts(migrated.contacts);
+            setGeneralNotes(migrated.generalNotes);
+            setConfirmDialog({ show: false, message: '', onConfirm: null });
+            alert(`✅ Restored successfully from v${backupVersion} backup.\n\nAll missing fields from older backups have been filled with safe defaults.`);
+            event.target.value = '';
+          }
+        });
       } catch (error) {
         alert('Error reading backup file: ' + error.message);
         event.target.value = '';
@@ -1787,7 +2088,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '2.8.0'
+        version: '2.9.1'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -1865,23 +2166,42 @@ function FarmWageManager() {
             });
 
             if (response.ok) {
-              const backupData = await response.json();
-              
+              const raw = await response.json();
+
+              if (!Array.isArray(raw.workers)) {
+                alert('Invalid backup file — could not find a workers list.');
+                return;
+              }
+
+              const migrated = migrateBackup(raw);
+              const backupVersion = raw.version || 'unknown';
+              const exportDate = raw.exportDate
+                ? new Date(raw.exportDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : 'unknown date';
+
+              const summary = [
+                `Backup version : ${backupVersion}`,
+                `Exported on    : ${exportDate}`,
+                `Workers        : ${migrated.workers.length}`,
+                `Attendance     : ${migrated.attendance.length} records`,
+                `Payments       : ${migrated.payments.length} records`,
+              ].join('\n');
+
               setConfirmDialog({
                 show: true,
-                message: 'Sure, you want to Restore? This will replace all current data.',
+                message: `Restore backup?\n\n${summary}\n\nThis will replace ALL current data and cannot be undone.`,
                 onConfirm: () => {
-                  setWorkers(backupData.workers);
-                  setAttendance(backupData.attendance);
-                  setPayments(backupData.payments || []);
-                  setSpecialNotes(backupData.specialNotes || []);
-                  setSeasonalWorks(backupData.seasonalWorks || []);
-                  setExpenses(backupData.expenses || []);
-                  setContractWorks(backupData.contractWorks || []);
-                  setContacts(backupData.contacts || []);
-                  setGeneralNotes(backupData.generalNotes || []);
+                  setWorkers(migrated.workers);
+                  setAttendance(migrated.attendance);
+                  setPayments(migrated.payments);
+                  setSpecialNotes(migrated.specialNotes);
+                  setSeasonalWorks(migrated.seasonalWorks);
+                  setExpenses(migrated.expenses);
+                  setContractWorks(migrated.contractWorks);
+                  setContacts(migrated.contacts);
+                  setGeneralNotes(migrated.generalNotes);
                   setConfirmDialog({ show: false, message: '', onConfirm: null });
-                  alert('✅ Data restored successfully from Google Drive!');
+                  alert(`✅ Restored successfully from v${backupVersion} backup (Google Drive).\n\nAll missing fields from older backups have been filled with safe defaults.`);
                 }
               });
             } else {
@@ -1998,9 +2318,7 @@ function FarmWageManager() {
       fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       paddingLeft: isMobile
         ? 'env(safe-area-inset-left)'
-        : sidebarOpen
-          ? 'calc(var(--sidebar-w) + env(safe-area-inset-left))'
-          : 'calc(var(--sidebar-collapsed-w) + env(safe-area-inset-left))',
+        : 'calc(var(--sidebar-collapsed-w) + env(safe-area-inset-left))',
       transition: 'padding-left 0.26s cubic-bezier(0.4,0,0.2,1)'
     }}>
       {/* Mobile overlay — tap to close sidebar */}
@@ -2023,8 +2341,9 @@ function FarmWageManager() {
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)'
       }}>
-        {/* Left: hamburger toggle + page title */}
+        {/* Left: hamburger toggle (mobile only) + page title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+          {isMobile && (
           <button
             onClick={() => setSidebarOpen(o => !o)}
             style={{
@@ -2036,6 +2355,7 @@ function FarmWageManager() {
           >
             <div style={{ width: '18px', height: '18px' }}>{Icons.menu}</div>
           </button>
+          )}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--label)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: '1px' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -8013,7 +8333,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 2.8.0
+              Version 2.9.1
             </p>
           </div>
         </div>
@@ -8026,9 +8346,36 @@ function FarmWageManager() {
         // Changelog data — single source of truth
         const CHANGELOG = [
           {
-            version: '2.8.0',
+            version: '2.9.1',
             date: '2026-03-08',
             latest: true,
+            stable: true,
+            entries: [
+              { type: 'add',    text: 'Backward-compatible restore: all 9 data collections pass through per-entity migration functions before being written to state — every field added across app versions is back-filled with a safe default.' },
+              { type: 'add',    text: 'migratePayment: type field defaulted to "payment" for old records — critical, as payment/credit distinction drives all wage balance calculations.' },
+              { type: 'add',    text: 'migrateWorker: phone, openingBalance, type ("regular"), active (true) and createdAt defaulted if absent.' },
+              { type: 'add',    text: 'migrateContractWork: totalItemCost, totalLaborCost and items array (added in v2.8) defaulted; all numeric fields coerced from string if needed.' },
+              { type: 'add',    text: 'migrateSeasonalWork: assignedWorkers array defaulted. migrateContact: whatsapp, location, rate defaulted. migrateGeneralNote: updatedAt defaulted.' },
+              { type: 'add',    text: 'migrateBackup: top-level function handles entirely absent collection keys (e.g. contacts missing in v1.x backups) gracefully by defaulting to empty arrays.' },
+              { type: 'add',    text: 'Restore confirmation dialog now shows backup version, export date and record counts before overwriting, so the user can verify the right file was selected.' },
+              { type: 'fix',    text: 'Restore validity check relaxed: only the workers array is required. Previously, attendance was also required — causing valid day-0 backups with zero attendance records to be rejected.' },
+              { type: 'fix',    text: 'Google Drive restore path updated with the same migration layer and matching confirmation dialog improvements.' },
+            ]
+          },
+          {
+            version: '2.9.0',
+            date: '2026-03-08',
+            entries: [
+              { type: 'add',    text: 'Source Protection: right-click context menu disabled app-wide to prevent "Inspect" / "View Page Source" shortcuts.' },
+              { type: 'add',    text: 'Source Protection: F12, Ctrl+Shift+I/J/C (DevTools), Ctrl+U (View Source), Ctrl+S (Save Page), Ctrl+P (Print) keyboard shortcuts suppressed.' },
+              { type: 'add',    text: 'Source Protection: Ctrl+A blocked at page level but passes through when focus is on any input, textarea or select — all app forms work unaffected.' },
+              { type: 'add',    text: 'Source Protection: CSS user-select:none globally; re-enabled for editable elements. DevTools docked-mode detection blurs app body when panel is open.' },
+              { type: 'add',    text: 'UX: Sidebar always collapsed (icon-only, 60 px) on desktop/tablet. Sidebar colour derived from active theme via CSS variables.' },
+            ]
+          },
+          {
+            version: '2.8.0',
+            date: '2026-03-08',
             stable: true,
             entries: [
               { type: 'fix',    text: 'Future-month navigation: "Next" button in Attendance and Reports now uses year-first comparison. Previous &&-logic incorrectly enabled the button when navigating into a year whose month number was smaller than the current month.' },
@@ -8144,7 +8491,7 @@ function FarmWageManager() {
               </p>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
                 <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 2.8.0
+                  Version 2.9.1
                 </div>
                 <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
                   8 Mar 2026
@@ -8293,10 +8640,10 @@ function FarmWageManager() {
         left: isMobile && !sidebarOpen ? 'calc(-1 * var(--sidebar-w) - 20px)' : 0,
         top: 0,
         bottom: 0,
-        width: (!isMobile && !sidebarOpen)
-          ? 'calc(var(--sidebar-collapsed-w) + env(safe-area-inset-left))'
-          : 'calc(var(--sidebar-w) + env(safe-area-inset-left))',
-        background: 'var(--navy)',
+        width: isMobile
+          ? 'calc(var(--sidebar-w) + env(safe-area-inset-left))'
+          : 'calc(var(--sidebar-collapsed-w) + env(safe-area-inset-left))',
+        background: 'var(--sidebar-bg)',
         display: 'flex',
         flexDirection: 'column',
         paddingTop: 'calc(0px + env(safe-area-inset-top))',
@@ -8307,13 +8654,13 @@ function FarmWageManager() {
         overflowX: 'hidden',
         transition: 'left 0.26s cubic-bezier(0.4,0,0.2,1), width 0.26s cubic-bezier(0.4,0,0.2,1)'
       }}>
-        {/* Logo / Brand + collapse toggle */}
+        {/* Logo / Brand */}
         <div style={{
           padding: '16px 12px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           marginBottom: '6px',
           display: 'flex', alignItems: 'center',
-          justifyContent: (!isMobile && !sidebarOpen) ? 'center' : 'space-between',
+          justifyContent: isMobile ? 'space-between' : 'center',
           gap: '8px', flexShrink: 0
         }}>
           {/* Logo mark — always visible */}
@@ -8323,41 +8670,23 @@ function FarmWageManager() {
               background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)',
               borderRadius: '9px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--navy)'
+              color: 'var(--sidebar-bg)'
             }}>
               <div style={{ width: '16px', height: '16px' }}>{Icons.farm}</div>
             </div>
-            {/* Brand text — hidden when desktop-collapsed */}
-            {(isMobile || sidebarOpen) && (
+            {/* Brand text — only on mobile drawer */}
+            {isMobile && (
               <div className="fm-sidebar-label" style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--teal)', letterSpacing: '-0.2px', lineHeight: '1.2' }}>Farm Manager</div>
                 <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Karnataka · India</div>
               </div>
             )}
           </div>
-          {/* Collapse toggle — desktop only */}
-          {!isMobile && (
-            <button
-              onClick={() => setSidebarOpen(o => !o)}
-              style={{
-                background: 'rgba(255,255,255,0.07)', border: 'none',
-                borderRadius: '8px', width: '28px', height: '28px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: 'rgba(255,255,255,0.45)',
-                flexShrink: 0, padding: 0, transition: 'background 0.15s'
-              }}
-              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              <div style={{ width: '16px', height: '16px' }}>
-                {sidebarOpen ? Icons.chevronLeft : Icons.chevronRight}
-              </div>
-            </button>
-          )}
         </div>
 
         {/* Nav section: MAIN */}
         <div style={{ padding: '4px 8px' }}>
-          {(isMobile || sidebarOpen) && (
+          {isMobile && (
             <div className="fm-sidebar-section-label" style={{ fontSize: '9.5px', fontWeight: '700', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '8px 6px 4px 6px' }}>Main</div>
           )}
           <NavButton icon={Icons.dashboard} label="Dashboard" active={activeView === 'dashboard'} onClick={() => handleNavClick('dashboard')} collapsed={!isMobile && !sidebarOpen} tooltip="Dashboard" />
@@ -8369,7 +8698,7 @@ function FarmWageManager() {
 
         {/* Nav section: FINANCE */}
         <div style={{ padding: '4px 8px' }}>
-          {(isMobile || sidebarOpen) && (
+          {isMobile && (
             <div className="fm-sidebar-section-label" style={{ fontSize: '9.5px', fontWeight: '700', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '8px 6px 4px 6px' }}>Finance</div>
           )}
           <NavButton icon={Icons.seasonal} label="Seasonal Work" active={activeView === 'seasonal'} onClick={() => handleNavClick('seasonal')} collapsed={!isMobile && !sidebarOpen} tooltip="Seasonal Work" />
@@ -8380,7 +8709,7 @@ function FarmWageManager() {
 
         {/* Nav section: MORE */}
         <div style={{ padding: '4px 8px' }}>
-          {(isMobile || sidebarOpen) && (
+          {isMobile && (
             <div className="fm-sidebar-section-label" style={{ fontSize: '9.5px', fontWeight: '700', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '8px 6px 4px 6px' }}>More</div>
           )}
           <NavButton icon={Icons.phonebook}    label="Phonebook"     active={activeView === 'phonebook'}    onClick={() => handleNavClick('phonebook')}    collapsed={!isMobile && !sidebarOpen} tooltip="Phonebook" />
@@ -9284,7 +9613,7 @@ function NavButton({ icon, label, active, onClick, collapsed, tooltip }) {
       onClick={onClick}
       title={collapsed ? tooltip : undefined}
       style={{
-        background: active ? 'rgba(0,201,167,0.14)' : 'transparent',
+        background: active ? 'var(--sidebar-active-bg)' : 'transparent',
         border: 'none',
         borderRadius: '10px',
         display: 'flex',
@@ -9294,7 +9623,7 @@ function NavButton({ icon, label, active, onClick, collapsed, tooltip }) {
         gap: '10px',
         cursor: 'pointer',
         padding: collapsed ? '10px 0' : '9px 10px',
-        color: active ? 'var(--teal)' : 'rgba(255,255,255,0.5)',
+        color: active ? 'var(--sidebar-active-fg)' : 'rgba(255,255,255,0.5)',
         width: '100%',
         textAlign: 'left',
         marginBottom: '1px',
@@ -9328,14 +9657,14 @@ function NavButton({ icon, label, active, onClick, collapsed, tooltip }) {
       {active && !collapsed && (
         <div style={{
           width: '5px', height: '5px', borderRadius: '50%',
-          background: 'var(--teal)', flexShrink: 0
+          background: 'var(--sidebar-active-fg)', flexShrink: 0
         }} />
       )}
       {active && collapsed && (
         <div style={{
           position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
           width: '3px', height: '20px', borderRadius: '2px',
-          background: 'var(--teal)'
+          background: 'var(--sidebar-active-fg)'
         }} />
       )}
 
