@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v2.9.4';
+const CACHE_VERSION = 'v2.9.5';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
@@ -51,9 +51,9 @@ const ASSET_CACHE  = `farm-manager-assets-${CACHE_VERSION}`;
 // These are fetched and stored before the SW becomes "installed".
 // Keep this list lean — only what's needed for a full offline first load.
 const SHELL_URLS = [
-  'https://apphosting-vh.github.io/farmxv21/',
-  'https://apphosting-vh.github.io/farmxv21/index.html',
-  'https://apphosting-vh.github.io/farmxv21/manifest.json',
+  'https://apphosting-vh.github.io/farmx/',
+  'https://apphosting-vh.github.io/farmx/index.html',
+  'https://apphosting-vh.github.io/farmx/manifest.json',
 ];
 
 // CDN scripts: pinned semver URLs — content never changes for a given URL.
@@ -66,7 +66,7 @@ const CDN_URLS = [
 
 // ─── URL classifiers ──────────────────────────────────────────────────────────
 const APP_ORIGIN = 'apphosting-vh.github.io';
-const APP_PATH   = '/farmxv21';
+const APP_PATH   = '/farmx';
 
 const CDN_ORIGINS = [
   'unpkg.com',
