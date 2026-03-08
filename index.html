@@ -3,12 +3,37 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 2.5.0                                            ║
+  ║  Version      : 2.8.0                                            ║
   ║  Release Date : 2026-03-08                                       ║
-  ║  Checksum     : b3f17a92e4dc1cf88b5ea3409e28ebd1                 ║
+  ║  Checksum     : e4a19c73b2f508da67cc14e92b380fda                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v2.8.0  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    * Bug fix: Future-month navigation — "Next" button now uses    ║
+  ║           year-first comparison; &&-logic allowed scrolling into  ║
+  ║           future years when month < current month (Attendance,   ║
+  ║           Reports)                                                ║
+  ║    * Bug fix: Payment type (Payment/Credit) now editable on edit ║
+  ║           — toggle shown during edit and type saved on update     ║
+  ║    * Bug fix: Deleting a worker now also deletes their Special    ║
+  ║           Notes; previously notes were orphaned in localStorage   ║
+  ║    * Bug fix: isFuture now parses YYYY-MM-DD as local midnight   ║
+  ║           (was UTC → 5:30 AM IST off-by-one in attendance)       ║
+  ║    * Bug fix: Collapsed worker/payment headers now use CSS vars  ║
+  ║           (--surface/--card) instead of hardcoded light colours   ║
+  ║    + Worker Notes: Edit button added — full edit/update flow     ║
+  ║    + Project Works: item costs auto-summed into Total Item Cost  ║
+  ║    * Bug fix: Dashboard Monthly Wages excludes inactive workers   ║
+  ║                                                                   ║
+  ║  v2.6.0  (2026-03-08)                                            ║
+  ║    * Bug fix: Theme switcher now correctly rewrites all CSS        ║
+  ║           custom properties (--surface, --card, --text-1, etc.)  ║
+  ║           via a useEffect on currentTheme — previously clicking  ║
+  ║           a theme only updated the picker UI, not the app        ║
+  ║    - Removed Online Backup (Google Drive) section from Settings  ║
+  ║    + App Info: full version history & changelog accordion added  ║
+  ║                                                                   ║
   ║  v2.5.0  (2026-03-08)                                            ║
   ║    + Auto Update Notification: detects new GitHub Pages deploys  ║
   ║           via 3 independent channels — SW updatefound event,     ║
@@ -87,7 +112,7 @@
   <meta name="msapplication-tap-highlight" content="no">
   <meta name="description" content="One Stop Solution for Farming Expense Management">
   <title>Farm Manager</title>
-  <link rel="manifest" href="https://apphosting-vh.github.io/farmxv21/manifest.json">
+  <link rel="manifest" href="https://apphosting-vh.github.io/farmx/manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
   <link rel="apple-touch-icon" href="/icon-192.png">
@@ -660,6 +685,7 @@ function FarmWageManager() {
   const [editingPayment, setEditingPayment] = useState(null);
   const [paymentType, setPaymentType] = useState('payment'); // 'payment' or 'credit'
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
   const [noteData, setNoteData] = useState(() => ({ workerId: null, note: '', date: formatLocalDate(new Date()) }));
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [editingSeasonalWork, setEditingSeasonalWork] = useState(null);
@@ -680,6 +706,10 @@ function FarmWageManager() {
   });
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
+  // App Info changelog accordion state
+  const [openVersions, setOpenVersions] = useState({ '2.8.0': true });
+  const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
+
   // ── Sidebar collapse state ────────────────────────────────────────────────
   // Default: collapsed on mobile (≤768px), expanded on desktop
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
@@ -696,6 +726,28 @@ function FarmWageManager() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // ── Apply theme CSS variables whenever the theme changes ─────────────────
+  useEffect(() => {
+    const root = document.documentElement;
+    const t = themes[currentTheme] || themes.arctic;
+    const isDark = t.mode === 'dark';
+    root.style.setProperty('--surface',   t.background);
+    root.style.setProperty('--card',      t.cardBg);
+    root.style.setProperty('--border',    isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.10)');
+    root.style.setProperty('--text-1',    t.textPrimary);
+    root.style.setProperty('--text-2',    t.textSecondary);
+    root.style.setProperty('--text-3',    t.textSecondary);
+    root.style.setProperty('--label',     t.textPrimary);
+    root.style.setProperty('--sublabel',  t.textSecondary);
+    root.style.setProperty('--teal',      t.primary);
+    root.style.setProperty('--teal-dim',  t.secondary);
+    root.style.setProperty('--success',   t.success);
+    root.style.setProperty('--warning',   t.warning);
+    root.style.setProperty('--danger',    t.danger);
+    // Reflect dark/light on <html> for any global selectors that need it
+    root.setAttribute('data-theme-mode', isDark ? 'dark' : 'light');
+  }, [currentTheme]);
 
   // Close sidebar on mobile when a nav item is clicked
   const handleNavClick = (view) => {
@@ -741,7 +793,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '2.5.0';
+  const APP_VERSION = '2.8.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -885,6 +937,7 @@ function FarmWageManager() {
         setWorkers(workers.filter(w => w.id !== id));
         setAttendance(attendance.filter(a => a.workerId !== id));
         setPayments(payments.filter(p => p.workerId !== id));
+        setSpecialNotes(specialNotes.filter(n => n.workerId !== id));
         setConfirmDialog({ show: false, message: '', onConfirm: null });
       }
     });
@@ -1208,7 +1261,7 @@ function FarmWageManager() {
       // Update existing payment
       setPayments(payments.map(p => 
         p.id === editingPayment.id 
-          ? { ...p, amount: parseFloat(paymentData.amount), notes: paymentData.notes, date: paymentData.date }
+          ? { ...p, amount: parseFloat(paymentData.amount), notes: paymentData.notes, date: paymentData.date, type: paymentType }
           : p
       ));
       setEditingPayment(null);
@@ -1243,17 +1296,26 @@ function FarmWageManager() {
     });
   };
 
-  // Add special note
+  // Add / edit special note
   const addSpecialNote = () => {
     if (!noteData.note || !noteData.workerId) return;
     
-    setSpecialNotes([...specialNotes, {
-      id: Date.now(),
-      workerId: noteData.workerId,
-      note: noteData.note,
-      date: noteData.date,
-      createdAt: new Date().toISOString()
-    }]);
+    if (editingNote) {
+      setSpecialNotes(specialNotes.map(n =>
+        n.id === editingNote.id
+          ? { ...n, workerId: noteData.workerId, note: noteData.note, date: noteData.date }
+          : n
+      ));
+      setEditingNote(null);
+    } else {
+      setSpecialNotes([...specialNotes, {
+        id: Date.now(),
+        workerId: noteData.workerId,
+        note: noteData.note,
+        date: noteData.date,
+        createdAt: new Date().toISOString()
+      }]);
+    }
     
     setNoteData({ workerId: null, note: '', date: formatLocalDate(new Date()) });
     setShowNoteModal(false);
@@ -1419,7 +1481,11 @@ function FarmWageManager() {
     
     const currentDate = new Date();
     const thisMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    const monthAttendance = attendance.filter(a => a.date.startsWith(thisMonth));
+    const monthAttendance = attendance.filter(a => {
+      if (!a.date.startsWith(thisMonth)) return false;
+      const w = workers.find(wk => wk.id === a.workerId);
+      return w && w.active !== false;
+    });
     
     const totalPaid = monthAttendance.reduce((sum, a) => {
       const worker = workers.find(w => w.id === a.workerId);
@@ -1592,7 +1658,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '2.4.0'
+      version: '2.8.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1721,7 +1787,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '2.5.0'
+        version: '2.8.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2436,16 +2502,16 @@ function FarmWageManager() {
                 </div>
                 <button
                   onClick={() => navigateCalendar('next')}
-                  disabled={calendarDate.getMonth() >= new Date().getMonth() && calendarDate.getFullYear() >= new Date().getFullYear()}
+                  disabled={calendarDate.getFullYear() > new Date().getFullYear() || (calendarDate.getFullYear() === new Date().getFullYear() && calendarDate.getMonth() >= new Date().getMonth())}
                   style={{
-                    background: (calendarDate.getMonth() >= new Date().getMonth() && calendarDate.getFullYear() >= new Date().getFullYear()) ? '#bdc3c7' : '#8b6f47',
+                    background: (calendarDate.getFullYear() > new Date().getFullYear() || (calendarDate.getFullYear() === new Date().getFullYear() && calendarDate.getMonth() >= new Date().getMonth())) ? '#bdc3c7' : '#8b6f47',
                     color: 'white',
                     border: 'none',
                     padding: '10px 16px',
                     borderRadius: '10px',
                     fontSize: '14px',
                     fontWeight: '600',
-                    cursor: (calendarDate.getMonth() >= new Date().getMonth() && calendarDate.getFullYear() >= new Date().getFullYear()) ? 'not-allowed' : 'pointer'
+                    cursor: (calendarDate.getFullYear() > new Date().getFullYear() || (calendarDate.getFullYear() === new Date().getFullYear() && calendarDate.getMonth() >= new Date().getMonth())) ? 'not-allowed' : 'pointer'
                   }}
                 >
                   Next
@@ -2488,11 +2554,9 @@ function FarmWageManager() {
                         style={{
                           width: '100%',
                           padding: '16px 20px',
-                          background: isCollapsed
-                            ? 'linear-gradient(135deg, #f5f0eb 0%, #ede6dc 100%)'
-                            : 'white',
-                          border: 'none',
-                          borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
+                          background: isCollapsed ? 'var(--surface)' : 'var(--card)',
+                        border: 'none',
+                        borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
@@ -2613,7 +2677,9 @@ function FarmWageManager() {
                             gap: '6px'
                           }}>
                             {monthDates.map(date => {
-                              const d = new Date(date);
+                              // Parse as local date (not UTC) to avoid off-by-one around midnight IST
+                              const [dy, dm, dd] = date.split('-').map(Number);
+                              const d = new Date(dy, dm - 1, dd);
                               const att = getAttendance(worker.id, date);
                               const isFuture = d > new Date();
                               const isToday = date === formatLocalDate(new Date());
@@ -2783,9 +2849,7 @@ function FarmWageManager() {
                       style={{
                         width: '100%',
                         padding: '16px 20px',
-                        background: isCollapsed
-                          ? 'linear-gradient(135deg, #eaf4fd 0%, #d6eaf8 100%)'
-                          : 'white',
+                        background: isCollapsed ? 'var(--surface)' : 'var(--card)',
                         border: 'none',
                         borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
                         display: 'flex',
@@ -3586,8 +3650,7 @@ function FarmWageManager() {
               </div>
             </div>
 
-            {!editingPayment && (
-              <div style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '16px' }}>
                 <label style={{
                   display: 'block',
                   fontSize: '14px',
@@ -3641,8 +3704,7 @@ function FarmWageManager() {
                     ? 'Record money paid to worker' 
                     : 'Record money deposited by worker (reduces their balance)'}
                 </p>
-              </div>
-            )}
+            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{
@@ -3804,7 +3866,7 @@ function FarmWageManager() {
             boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
           }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
-              Add Special Note
+              {editingNote ? 'Edit Special Note' : 'Add Special Note'}
             </h3>
 
             <div style={{ marginBottom: '16px' }}>
@@ -3896,6 +3958,7 @@ function FarmWageManager() {
               <button
                 onClick={() => {
                   setShowNoteModal(false);
+                  setEditingNote(null);
                   setNoteData({ workerId: null, note: '', date: formatLocalDate(new Date()) });
                 }}
                 style={{
@@ -3932,7 +3995,7 @@ function FarmWageManager() {
                     : '0 4px 12px rgba(155,89,182,0.3)'
                 }}
               >
-                Add Note
+                {editingNote ? 'Update Note' : 'Add Note'}
               </button>
             </div>
           </div>
@@ -4705,7 +4768,8 @@ function FarmWageManager() {
                           onChange={(e) => {
                             const items = [...contractData.items];
                             items[idx] = { ...items[idx], cost: e.target.value };
-                            setContractData({ ...contractData, items });
+                            const autoTotal = items.reduce((s, i) => s + (parseFloat(i.cost) || 0), 0);
+                            setContractData({ ...contractData, items, totalItemCost: autoTotal > 0 ? autoTotal.toString() : contractData.totalItemCost });
                           }}
                           placeholder="0"
                           style={{ padding: '9px', border: '1.5px solid #c7d2fe', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', width: '100%' }}
@@ -4713,7 +4777,9 @@ function FarmWageManager() {
                         <button
                           onClick={() => {
                             const items = contractData.items.filter((_, i) => i !== idx);
-                            setContractData({ ...contractData, items: items.length ? items : [{ name: '', qty: '', unit: '', cost: '' }] });
+                            const safeItems = items.length ? items : [{ name: '', qty: '', unit: '', cost: '' }];
+                            const autoTotal = safeItems.reduce((s, i) => s + (parseFloat(i.cost) || 0), 0);
+                            setContractData({ ...contractData, items: safeItems, totalItemCost: autoTotal > 0 ? autoTotal.toString() : '' });
                           }}
                           style={{
                             width: '32px', height: '32px', border: 'none', background: '#fee2e2',
@@ -4730,7 +4796,7 @@ function FarmWageManager() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)' }}>
-                      Total Item Cost (₹)
+                      Total Item Cost (₹) <span style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '500' }}>auto-calculated</span>
                     </label>
                     <input
                       type="number"
@@ -5228,21 +5294,42 @@ function FarmWageManager() {
                                   })}
                                 </span>
                               </div>
-                              <button
-                                onClick={() => deleteSpecialNote(note.id)}
-                                style={{
-                                  padding: '4px 10px',
-                                  border: 'none',
-                                  background: '#fde8e8',
-                                  color: '#c0392b',
-                                  borderRadius: '8px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  fontWeight: '700'
-                                }}
-                              >
-                                <div style={{width:'14px',height:'14px'}}>{Icons.trash}</div>
-                              </button>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <button
+                                  onClick={() => {
+                                    setEditingNote(note);
+                                    setNoteData({ workerId: note.workerId, note: note.note, date: note.date });
+                                    setShowNoteModal(true);
+                                  }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    border: 'none',
+                                    background: '#ebf5fb',
+                                    color: '#2874a6',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '700'
+                                  }}
+                                >
+                                  <div style={{width:'14px',height:'14px'}}>{Icons.edit}</div>
+                                </button>
+                                <button
+                                  onClick={() => deleteSpecialNote(note.id)}
+                                  style={{
+                                    padding: '4px 10px',
+                                    border: 'none',
+                                    background: '#fde8e8',
+                                    color: '#c0392b',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '700'
+                                  }}
+                                >
+                                  <div style={{width:'14px',height:'14px'}}>{Icons.trash}</div>
+                                </button>
+                              </div>
                             </div>
                             {/* note body */}
                             <div style={{
@@ -6274,16 +6361,16 @@ function FarmWageManager() {
             </div>
             <button
               onClick={() => navigateReportMonth('next')}
-              disabled={reportMonth.getMonth() >= new Date().getMonth() && reportMonth.getFullYear() >= new Date().getFullYear()}
+              disabled={reportMonth.getFullYear() > new Date().getFullYear() || (reportMonth.getFullYear() === new Date().getFullYear() && reportMonth.getMonth() >= new Date().getMonth())}
               style={{
-                background: (reportMonth.getMonth() >= new Date().getMonth() && reportMonth.getFullYear() >= new Date().getFullYear()) ? 'var(--border)' : 'var(--navy)',
+                background: (reportMonth.getFullYear() > new Date().getFullYear() || (reportMonth.getFullYear() === new Date().getFullYear() && reportMonth.getMonth() >= new Date().getMonth())) ? 'var(--border)' : 'var(--navy)',
                 color: 'white',
                 border: 'none',
                 padding: '10px 16px',
                 borderRadius: '10px',
                 fontSize: '14px',
                 fontWeight: '600',
-                cursor: (reportMonth.getMonth() >= new Date().getMonth() && reportMonth.getFullYear() >= new Date().getFullYear()) ? 'not-allowed' : 'pointer'
+                cursor: (reportMonth.getFullYear() > new Date().getFullYear() || (reportMonth.getFullYear() === new Date().getFullYear() && reportMonth.getMonth() >= new Date().getMonth())) ? 'not-allowed' : 'pointer'
               }}
             >
               Next
@@ -7754,250 +7841,6 @@ function FarmWageManager() {
             </div>
           </div>
 
-          {/* Online Backup (Google Drive) */}
-          <div style={{
-            background: 'var(--card)',
-            borderRadius: '16px',
-            padding: '20px',
-            marginBottom: '16px',
-            border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
-          }}>
-            <h3 style={{
-              margin: '0 0 16px 0',
-              fontSize: '18px',
-              fontWeight: '700',
-              color: 'var(--text-1)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{ fontSize: '24px' }}>☁️</span>
-              Online Backup (Google Drive)
-            </h3>
-            
-            <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-1)', fontWeight: '500', lineHeight: '1.5' }}>
-              Save and restore backups directly to/from your Google Drive
-            </p>
-
-            {!googleClientId || !googleApiKey ? (
-              <div style={{
-                padding: '16px',
-                background: '#fff3cd',
-                borderRadius: '12px',
-                marginBottom: '16px',
-                border: '2px solid #f39c12'
-              }}>
-                <div style={{
-                  fontSize: '14px',
-                  color: '#92400e',
-                  marginBottom: '12px',
-                  fontWeight: '600'
-                }}>
-                  Configuration Required
-                </div>
-                <div style={{
-                  fontSize: '13px',
-                  color: '#92400e',
-                  lineHeight: '1.5',
-                  marginBottom: '12px'
-                }}>
-                  To use Google Drive backup, you need to:
-                  <br/>1. Create a Google Cloud Project
-                  <br/>2. Enable Google Drive API
-                  <br/>3. Get Client ID and API Key
-                </div>
-                <button
-                  onClick={() => setShowGoogleConfig(!showGoogleConfig)}
-                  style={{
-                    padding: '10px 16px',
-                    background: '#f39c12',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {showGoogleConfig ? 'Hide Configuration' : 'Configure Google Drive'}
-                </button>
-              </div>
-            ) : (
-              <div style={{
-                padding: '12px 16px',
-                background: '#d4edda',
-                borderRadius: '8px',
-                fontSize: '13px',
-                color: '#14532d',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <div style={{width:'16px',height:'16px',color:'var(--success)'}}>{Icons.check}</div>
-                <span>Google Drive configured and ready</span>
-                <button
-                  onClick={() => setShowGoogleConfig(!showGoogleConfig)}
-                  style={{
-                    marginLeft: 'auto',
-                    padding: '4px 8px',
-                    background: 'transparent',
-                    border: '1px solid #155724',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    color: '#14532d',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {showGoogleConfig ? 'Hide' : 'Edit'}
-                </button>
-              </div>
-            )}
-
-            {showGoogleConfig && (
-              <div style={{
-                padding: '16px',
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '12px',
-                marginBottom: '16px'
-              }}>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: 'var(--text-1)',
-                    marginBottom: '6px'
-                  }}>
-                    Google Client ID *
-                  </label>
-                  <input
-                    type="text"
-                    value={googleClientId}
-                    onChange={(e) => setGoogleClientId(e.target.value)}
-                    placeholder="xxxxx.apps.googleusercontent.com"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '2px solid var(--border)',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: 'var(--text-1)',
-                    marginBottom: '6px'
-                  }}>
-                    Google API Key *
-                  </label>
-                  <input
-                    type="text"
-                    value={googleApiKey}
-                    onChange={(e) => setGoogleApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '2px solid var(--border)',
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      fontFamily: 'inherit'
-                    }}
-                  />
-                </div>
-                <div style={{
-                  padding: '12px',
-                  background: '#e3f2fd',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  color: '#1565c0',
-                  lineHeight: '1.5'
-                }}>
-                  <strong>📚 Setup Guide:</strong>
-                  <br/>1. Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener" style={{color: '#1565c0', textDecoration: 'underline'}}>Google Cloud Console</a>
-                  <br/>2. Create a new project
-                  <br/>3. Enable "Google Drive API" and "Google Picker API"
-                  <br/>4. Create OAuth 2.0 Client ID (Web application)
-                  <br/>5. Add authorized origin: <code style={{background: '#fff', padding: '2px 6px', borderRadius: '4px'}}>https://claude.ai</code>
-                  <br/>6. Create API Key (no restrictions needed for testing)
-                  <br/>7. Copy Client ID and API Key here
-                </div>
-              </div>
-            )}
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button
-                onClick={saveToGoogleDrive}
-                disabled={!googleClientId || !googleApiKey}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  border: 'none',
-                  background: (!googleClientId || !googleApiKey) 
-                    ? '#bdc3c7' 
-                    : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  cursor: (!googleClientId || !googleApiKey) ? 'not-allowed' : 'pointer',
-                  color: 'white',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  boxShadow: (!googleClientId || !googleApiKey) ? 'none' : '0 4px 12px rgba(52,152,219,0.3)'
-                }}
-              >
-                <span style={{ fontSize: '20px' }}>☁️</span>
-                Backup to Google Drive
-              </button>
-
-              <button
-                onClick={restoreFromGoogleDrive}
-                disabled={!googleClientId || !googleApiKey}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  border: (!googleClientId || !googleApiKey) ? '2px solid #bdc3c7' : '2px solid #0077b6',
-                  background: 'var(--card)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  cursor: (!googleClientId || !googleApiKey) ? 'not-allowed' : 'pointer',
-                  color: (!googleClientId || !googleApiKey) ? '#bdc3c7' : '#0077b6',
-                  fontSize: '16px',
-                  fontWeight: '600'
-                }}
-              >
-                <div style={{width:'18px',height:'18px'}}>{Icons.download}</div>
-                Restore from Google Drive
-              </button>
-
-              <div style={{
-                padding: '12px',
-                background: '#f0f9ff',
-                borderRadius: '8px',
-                fontSize: '13px',
-                color: '#0369a1',
-                lineHeight: '1.5'
-              }}>
-                <strong style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><div style={{width:'14px',height:'14px'}}>{Icons.info2}</div>How it works:</strong>
-                <br/>• Backup: Saves JSON file directly to your Google Drive
-                <br/>• Restore: Opens picker to select backup file from your Drive
-                <br/>• Your data never leaves your control
-              </div>
-            </div>
-          </div>
-
           {/* Data Management */}
           <div style={{
             background: 'var(--card)',
@@ -8170,7 +8013,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 2.4.0
+              Version 2.8.0
             </p>
           </div>
         </div>
@@ -8179,150 +8022,268 @@ function FarmWageManager() {
       {/* App Info View */}
       {activeView === 'appinfo' && (
         <div style={{ padding: '24px 28px' }}>
+        {(() => {
+        // Changelog data — single source of truth
+        const CHANGELOG = [
+          {
+            version: '2.8.0',
+            date: '2026-03-08',
+            latest: true,
+            stable: true,
+            entries: [
+              { type: 'fix',    text: 'Future-month navigation: "Next" button in Attendance and Reports now uses year-first comparison. Previous &&-logic incorrectly enabled the button when navigating into a year whose month number was smaller than the current month.' },
+              { type: 'fix',    text: 'Payment type (Payment / Credit) is now editable — the type toggle is shown during edit and the updated type is saved. Previously the type was permanently fixed at creation.' },
+              { type: 'fix',    text: 'Deleting a worker now also deletes their Special Notes. Previously notes were orphaned in localStorage causing invisible ghost data to accumulate.' },
+              { type: 'fix',    text: 'Attendance isFuture check now parses YYYY-MM-DD as local midnight instead of UTC, fixing a 5:30 AM IST off-by-one that blocked today\'s attendance marking in early morning.' },
+              { type: 'fix',    text: 'Attendance & Payment collapsed worker headers now use CSS variables (--surface / --card) instead of hardcoded light hex colours, fixing jarring white bands on all dark themes.' },
+              { type: 'add',    text: 'Worker Notes: Edit button added to each note card — full edit / update flow with pre-filled modal, matching all other modules.' },
+              { type: 'add',    text: 'Project Works: item costs are now auto-summed into the Total Item Cost field as you type. Field is labelled "auto-calculated".' },
+              { type: 'fix',    text: 'Dashboard Monthly Wages stat now excludes inactive workers from the attendance scan.' },
+            ]
+          },
+          {
+            version: '2.7.0',
+            date: '2026-03-08',
+            entries: [
+              { type: 'fix',    text: 'React error #310 — useState was called inside an IIFE embedded in JSX return on the App Info page, violating React\'s rules of hooks. Fixed by moving openVersions state and toggleVersion handler to component top level.' },
+              { type: 'fix',    text: 'App Info: IIFE return now wrapped in a React fragment (<>...</>) so multiple sibling elements are returned with a valid single root.' },
+              { type: 'change', text: 'openVersions default key updated to current version on each release so the latest entry auto-expands on first visit.' },
+            ]
+          },
+          {
+            version: '2.6.0',
+            date: '2026-03-08',
+            entries: [
+              { type: 'fix',    text: 'Theme switcher now correctly rewrites all CSS custom properties via a useEffect on currentTheme — previously clicking a theme only updated the picker widget, not the app colours.' },
+              { type: 'remove', text: 'Removed Online Backup (Google Drive) section from Settings for a cleaner interface.' },
+              { type: 'add',    text: 'App Info: full version history & changelog accordion (this page) added.' },
+            ]
+          },
+          {
+            version: '2.5.0',
+            date: '2026-03-08',
+            entries: [
+              { type: 'add', text: 'Auto Update Notification: detects new GitHub Pages deploys via 3 independent channels — SW updatefound event, custom swUpdateReady event from inline script, and version-string poll against live page (every 30 min).' },
+              { type: 'add', text: 'Toast banner with animated slide-up + pulse glow effect; "Update Now" triggers SKIP_WAITING → controllerchange → auto-reload; "Later" dismisses for the session.' },
+              { type: 'add', text: 'SW registration script now exposes window.__swReg and fires swUpdateReady custom event on state change.' },
+            ]
+          },
+          {
+            version: '2.4.0',
+            date: '2026-03-02',
+            stable: true,
+            entries: [
+              { type: 'fix', text: 'Attendance calendar popups (Special Note, Opening Balance, Attendance menu) now use position:fixed + getBoundingClientRect() for smart viewport-aware placement — flips above cell when near bottom edge, clamps horizontally so right-edge/left-edge cells never clip outside the screen boundary.' },
+              { type: 'fix', text: 'All three popup types escape overflow:hidden parent containers via fixed positioning; shared Popup helper eliminates duplicated backdrop logic.' },
+            ]
+          },
+          {
+            version: '2.3.0',
+            date: '2026-03-01',
+            entries: [
+              { type: 'add', text: 'Attendance: collapse/expand calendar per worker by tapping worker name; chevron indicator; compact attendance summary pills when collapsed; ⊞/⊟ expand/collapse all.' },
+              { type: 'add', text: 'Payments: collapse/expand full payment card per worker; summary pills show earnings, paid, credit, past txns when collapsed; ⊞/⊟ expand/collapse all.' },
+              { type: 'add', text: 'Seasonal Work: month-grouped accordion within year filter; newest month auto-expanded; ⊞/⊟ all; per-month total.' },
+              { type: 'add', text: 'Expenses: month-grouped accordion within year filter; per-month item count and total; ⊞/⊟ all.' },
+              { type: 'add', text: 'Project Works: month-grouped accordion within year filter; per-month project count and contract cost; ⊞/⊟ all.' },
+              { type: 'add', text: 'Year navigation resets month collapse state on all pages.' },
+            ]
+          },
+          {
+            version: '2.2.0',
+            date: '2026-03-01',
+            entries: [
+              { type: 'add', text: 'App Info tab: copyright & IP notice, owner attribution accessible via sidebar nav and dashboard quick actions.' },
+            ]
+          },
+          {
+            version: '2.1.0',
+            date: '2026-03-01',
+            entries: [
+              { type: 'add', text: 'PWA: viewport-fit=cover for notch/punch-hole support.' },
+              { type: 'add', text: 'PWA: 100dvh dynamic viewport height — Chrome toolbar fix.' },
+              { type: 'add', text: 'PWA: env(safe-area-inset-*) on body, header, sidebar, loading screen and all sticky-bottom modal footers.' },
+              { type: 'add', text: 'Worker Notes: month-wise grouping with chevron navigation, quick-jump pills, smart empty states, UTC date fix.' },
+              { type: 'add', text: 'Payments: collapsible Previous Month Transactions panel per worker, two-level month accordion, auto-expands most recent month, full edit/delete on past records.' },
+            ]
+          },
+          {
+            version: '2.0.0',
+            date: '2026-02-01',
+            entries: [
+              { type: 'add', text: 'Initial multi-module farm management app launched.' },
+              { type: 'add', text: 'Modules: Workers, Attendance, Payments, Worker Notes, Seasonal Work, Expenses, Project Works, Phonebook, Reports, General Notes, Settings, Themes.' },
+              { type: 'add', text: 'localStorage persistence, Backup/Restore, 6 themes (3 light, 3 dark), PWA support.' },
+            ]
+          },
+        ];
 
-          {/* Hero banner */}
-          <div style={{
-            background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 100%)`,
-            borderRadius: '20px',
-            padding: '36px 24px',
-            textAlign: 'center',
-            marginBottom: '20px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
-          }}>
-            <div style={{width:'56px',height:'56px',margin:'0 auto 12px',color:'white'}}>{Icons.farm}</div>
-            <h1 style={{
-              margin: '0 0 6px 0',
-              fontSize: '26px',
-              fontWeight: '800',
-              color: 'white',
-              letterSpacing: '-0.5px'
-            }}>
-              Farm Manager
-            </h1>
-            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
-              One Stop Solution for Farming Expense Management
-            </p>
+        const typeStyle = {
+          add:    { bg: '#dcfce7', color: '#15803d', label: '+ ADD' },
+          fix:    { bg: '#dbeafe', color: '#1d4ed8', label: '✱ FIX' },
+          remove: { bg: '#fee2e2', color: '#b91c1c', label: '− REM' },
+          change: { bg: '#fef9c3', color: '#92400e', label: '~ CHG' },
+        };
+
+        return (
+          <>
             <div style={{
-              display: 'inline-block',
-              background: 'rgba(255,255,255,0.2)',
+              background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 100%)`,
               borderRadius: '20px',
-              padding: '4px 16px',
-              fontSize: '13px',
-              fontWeight: '700',
-              color: 'white'
+              padding: '32px 24px',
+              textAlign: 'center',
+              marginBottom: '20px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
             }}>
-              Version 2.4.0
-            </div>
-          </div>
-
-          {/* Copyright card */}
-          <div style={{
-            background: 'var(--card)',
-            borderRadius: '20px',
-            overflow: 'hidden',
-            boxShadow: '0 2px 16px rgba(0,0,0,0.09)',
-            marginBottom: '20px'
-          }}>
-            {/* Card header */}
-            <div style={{
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-              padding: '18px 24px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <span style={{ fontSize: '22px' }}>©</span>
-              <div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: 'white' }}>
-                  App Info &amp; Copyright
+              <div style={{width:'52px',height:'52px',margin:'0 auto 12px',color:'white'}}>{Icons.farm}</div>
+              <h1 style={{ margin:'0 0 4px 0', fontSize:'26px', fontWeight:'800', color:'white', letterSpacing:'-0.5px' }}>
+                Farm Manager
+              </h1>
+              <p style={{ margin:'0 0 14px 0', fontSize:'13px', color:'rgba(255,255,255,0.8)' }}>
+                One Stop Solution for Farming Expense Management
+              </p>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
+                <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
+                  Version 2.8.0
                 </div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
-                  Intellectual Property Notice
+                <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
+                  8 Mar 2026
                 </div>
               </div>
             </div>
 
-            {/* Copyright body */}
-            <div style={{ padding: '24px' }}>
-
-              {/* Owner line */}
-              <div style={{
-                fontSize: '17px',
-                fontWeight: '800',
-                color: '#1a1a2e',
-                marginBottom: '16px',
-                paddingBottom: '16px',
-                borderBottom: '2px solid #f0f0f0'
-              }}>
-                © 2026 Vivek Hegde Hulimane. All rights reserved.
+            {/* ── Copyright card ──────────────────────────────────────── */}
+            <div style={{ background:'var(--card)', borderRadius:'20px', overflow:'hidden', boxShadow:'0 2px 16px rgba(0,0,0,0.09)', marginBottom:'20px' }}>
+              <div style={{ background:'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', padding:'18px 24px', display:'flex', alignItems:'center', gap:'12px' }}>
+                <span style={{ fontSize:'22px' }}>©</span>
+                <div>
+                  <div style={{ fontSize:'16px', fontWeight:'800', color:'white' }}>App Info &amp; Copyright</div>
+                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.6)', marginTop:'2px' }}>Intellectual Property Notice</div>
+                </div>
               </div>
-
-              {/* Main copyright para */}
-              <p style={{
-                margin: '0 0 16px 0',
-                fontSize: '14px',
-                color: 'var(--text-1)',
-                lineHeight: '1.75'
-              }}>
-                <strong>Farm Manager</strong> and all associated content, including but not limited to
-                its design, layout, text, graphics, user interface, icons, images, software, source
-                code, databases, features, and functionality, are the exclusive intellectual property
-                of <strong>Vivek Hegde Hulimane</strong> and are protected under applicable copyright,
-                trademark, and other intellectual property laws.
-              </p>
-
-              {/* Restriction para */}
-              <p style={{
-                margin: '0 0 16px 0',
-                fontSize: '14px',
-                color: 'var(--text-1)',
-                lineHeight: '1.75'
-              }}>
-                No part of this application may be reproduced, distributed, modified, transmitted,
-                displayed, published, reverse engineered, or otherwise exploited in any form or by any
-                means without prior written permission from <strong>Vivek Hegde Hulimane</strong>.
-              </p>
-
-              {/* Warning strip */}
-              <div style={{
-                background: '#fff3cd',
-                border: '1px solid #ffc107',
-                borderLeft: '4px solid #e67e22',
-                borderRadius: '10px',
-                padding: '14px 16px',
-                display: 'flex',
-                gap: '10px',
-                alignItems: 'flex-start'
-              }}>
-                <div style={{width:'18px',height:'18px',color:'var(--warning)',flexShrink:0}}>{Icons.alert}</div>
-                <p style={{
-                  margin: 0,
-                  fontSize: '13px',
-                  color: '#7d4a00',
-                  lineHeight: '1.6',
-                  fontWeight: '600'
-                }}>
-                  Unauthorized use may result in civil and/or criminal penalties under applicable laws.
+              <div style={{ padding:'24px' }}>
+                <div style={{ fontSize:'16px', fontWeight:'800', color:'var(--text-1)', marginBottom:'14px', paddingBottom:'14px', borderBottom:'1px solid var(--border)' }}>
+                  © 2026 Vivek Hegde Hulimane. All rights reserved.
+                </div>
+                <p style={{ margin:'0 0 14px 0', fontSize:'14px', color:'var(--text-2)', lineHeight:'1.75' }}>
+                  <strong style={{color:'var(--text-1)'}}>Farm Manager</strong> and all associated content — including design, layout, source code, databases, features and functionality — are the exclusive intellectual property of <strong style={{color:'var(--text-1)'}}>Vivek Hegde Hulimane</strong> and are protected under applicable copyright, trademark and intellectual property laws.
                 </p>
+                <p style={{ margin:'0 0 16px 0', fontSize:'14px', color:'var(--text-2)', lineHeight:'1.75' }}>
+                  No part of this application may be reproduced, distributed, modified, transmitted, displayed, published, reverse engineered, or otherwise exploited in any form without prior written permission from <strong style={{color:'var(--text-1)'}}>Vivek Hegde Hulimane</strong>.
+                </p>
+                <div style={{ background:'#fff3cd', border:'1px solid #ffc107', borderLeft:'4px solid #e67e22', borderRadius:'10px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                  <div style={{width:'18px',height:'18px',color:'#e67e22',flexShrink:0,marginTop:'1px'}}>{Icons.alert}</div>
+                  <p style={{ margin:0, fontSize:'13px', color:'#7d4a00', lineHeight:'1.6', fontWeight:'600' }}>
+                    Unauthorized use may result in civil and/or criminal penalties under applicable laws.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Built with love card */}
-          <div style={{
-            background: 'var(--card)',
-            borderRadius: '16px',
-            padding: '20px 24px',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
-            textAlign: 'center'
-          }}>
-            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', lineHeight: '1.7' }}>
-              Designed &amp; built for farmers<br/>
-              <span style={{ fontWeight: '700', color: 'var(--text-1)' }}>Vivek Hegde Hulimane</span><br/>
-              <span style={{ fontSize: '12px' }}>Hulimane, Karnataka, India</span>
-            </p>
-          </div>
+            {/* ── Version History & Changelog ─────────────────────────── */}
+            <div style={{ background:'var(--card)', borderRadius:'20px', overflow:'hidden', boxShadow:'0 2px 16px rgba(0,0,0,0.08)', marginBottom:'20px' }}>
+              {/* Section header */}
+              <div style={{ padding:'18px 24px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:'12px' }}>
+                <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:`${theme.primary}18`, display:'flex', alignItems:'center', justifyContent:'center', color:theme.primary }}>
+                  {Icons.reports}
+                </div>
+                <div>
+                  <div style={{ fontSize:'16px', fontWeight:'700', color:'var(--text-1)' }}>Version History</div>
+                  <div style={{ fontSize:'12px', color:'var(--text-2)', marginTop:'2px' }}>{CHANGELOG.length} releases</div>
+                </div>
+              </div>
 
+              {/* Accordion entries */}
+              <div style={{ padding:'16px' }}>
+                {CHANGELOG.map((rel, idx) => {
+                  const isOpen = !!openVersions[rel.version];
+                  return (
+                    <div key={rel.version} style={{ marginBottom: idx < CHANGELOG.length - 1 ? '8px' : 0 }}>
+                      {/* Version row header */}
+                      <button
+                        onClick={() => toggleVersion(rel.version)}
+                        style={{
+                          width:'100%', display:'flex', alignItems:'center', gap:'10px',
+                          padding:'12px 14px', borderRadius:'12px', border:'none', cursor:'pointer',
+                          background: isOpen ? `${theme.primary}10` : 'var(--surface)',
+                          textAlign:'left', transition:'background 0.15s'
+                        }}
+                      >
+                        {/* Version badge */}
+                        <div style={{
+                          minWidth:'68px', padding:'4px 10px', borderRadius:'8px', textAlign:'center',
+                          background: rel.latest ? theme.primary : rel.stable ? '#059669' : 'var(--border)',
+                          color: rel.latest || rel.stable ? 'white' : 'var(--text-2)',
+                          fontSize:'12px', fontWeight:'800', fontFamily:"'DM Mono', monospace", letterSpacing:'0.03em'
+                        }}>
+                          v{rel.version}
+                        </div>
+                        {/* Date */}
+                        <span style={{ fontSize:'13px', color:'var(--text-2)', fontWeight:'500', flex:1 }}>{rel.date}</span>
+                        {/* Tags */}
+                        {rel.latest && (
+                          <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'20px', background:`${theme.primary}20`, color:theme.primary }}>LATEST</span>
+                        )}
+                        {rel.stable && (
+                          <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'20px', background:'#dcfce7', color:'#15803d' }}>STABLE</span>
+                        )}
+                        {/* Chevron */}
+                        <div style={{ width:'16px', height:'16px', color:'var(--text-2)', transform: isOpen ? 'rotate(90deg)' : 'none', transition:'transform 0.18s' }}>
+                          {Icons.chevronRight}
+                        </div>
+                      </button>
+
+                      {/* Entry list */}
+                      {isOpen && (
+                        <div style={{ padding:'8px 14px 4px 14px', display:'flex', flexDirection:'column', gap:'7px' }}>
+                          {rel.entries.map((e, i) => {
+                            const s = typeStyle[e.type] || typeStyle.add;
+                            return (
+                              <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                                <span style={{
+                                  flexShrink:0, fontSize:'9px', fontWeight:'800', padding:'3px 6px',
+                                  borderRadius:'5px', background:s.bg, color:s.color,
+                                  fontFamily:"'DM Mono', monospace", letterSpacing:'0.05em',
+                                  marginTop:'2px', whiteSpace:'nowrap'
+                                }}>
+                                  {s.label}
+                                </span>
+                                <span style={{ fontSize:'13px', color:'var(--text-2)', lineHeight:'1.6' }}>
+                                  {e.text}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Stack / Tech ────────────────────────────────────────── */}
+            <div style={{ background:'var(--card)', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', marginBottom:'20px' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-2)', marginBottom:'14px' }}>Tech Stack</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                {['React 18 (UMD CDN)', 'Babel Standalone', 'Vanilla CSS', 'Single HTML File', 'No Build Step', 'localStorage', 'PWA + Service Worker', 'GitHub Pages'].map(t => (
+                  <span key={t} style={{ fontSize:'12px', fontWeight:'600', padding:'5px 12px', borderRadius:'20px', background:'var(--surface)', color:'var(--text-2)', border:'1px solid var(--border)' }}>{t}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Footer ──────────────────────────────────────────────── */}
+            <div style={{ background:'var(--card)', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', textAlign:'center' }}>
+              <p style={{ margin:0, fontSize:'13px', color:'var(--text-2)', fontWeight:'500', lineHeight:'1.8' }}>
+                Designed &amp; built for farmers<br/>
+                <span style={{ fontWeight:'700', color:'var(--text-1)', fontSize:'15px' }}>Vivek Hegde Hulimane</span><br/>
+                <span style={{ fontSize:'12px' }}>Hulimane, Karnataka, India</span>
+              </p>
+            </div>
+
+          </>
+        );
+      })()}
         </div>
       )}
 
