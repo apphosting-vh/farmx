@@ -3,12 +3,26 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 2.9.3                                            ║
+  ║  Version      : 2.9.4                                            ║
   ║  Release Date : 2026-03-08                                       ║
   ║  Checksum     : f7b23d91c4e608eb78dd25fa03c491ge                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v2.9.4  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    * Bug fix: App was blurring itself on tablets/phones because   ║
+  ║           the DevTools window-size detector compared             ║
+  ║           outerHeight vs innerHeight — browser chrome alone      ║
+  ║           (status bar + address bar + nav bar) consumes 200 px+  ║
+  ║           on Android, exceeding the 160 px threshold and         ║
+  ║           triggering blur on every page load. Detector removed.  ║
+  ║           All other source-protection layers remain active.      ║
+  ║    * Bug fix: Browser address bar colour hardcoded to old teal   ║
+  ║           value in <meta name="theme-color"> — now set to        ║
+  ║           #0f172a (Arctic dark) on load and updated dynamically  ║
+  ║           in theme useEffect to match the active theme's         ║
+  ║           sidebar background colour on every theme switch        ║
+  ║                                                                   ║
   ║  v2.9.3  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
   ║    * Bug fix: Browser address bar / PWA chrome colour was        ║
   ║           hardcoded to #0077b6 (teal-blue) via                  ║
@@ -343,32 +357,7 @@
     consoleWarning();
     setInterval(consoleWarning, 2000);
 
-    // 6. DevTools open detection via window size delta
-    // When DevTools is docked, it reduces window.innerWidth or innerHeight.
-    var devtoolsOpen = false;
-    var threshold = 160;
-    var checkDevTools = function() {
-      var widthDiff  = window.outerWidth  - window.innerWidth;
-      var heightDiff = window.outerHeight - window.innerHeight;
-      if (widthDiff > threshold || heightDiff > threshold) {
-        if (!devtoolsOpen) {
-          devtoolsOpen = true;
-          document.body.style.filter = 'blur(8px)';
-          document.body.style.pointerEvents = 'none';
-          document.body.style.userSelect = 'none';
-        }
-      } else {
-        if (devtoolsOpen) {
-          devtoolsOpen = false;
-          document.body.style.filter = '';
-          document.body.style.pointerEvents = '';
-          document.body.style.userSelect = '';
-        }
-      }
-    };
-    setInterval(checkDevTools, 800);
-
-    // 7. Disable print (Ctrl+P blocked above, but also catch beforeprint)
+    // 6. Disable print (Ctrl+P blocked above, but also catch beforeprint)
     window.addEventListener('beforeprint', function(e) {
       e.preventDefault();
       e.stopPropagation();
@@ -879,7 +868,7 @@ function FarmWageManager() {
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
   // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '2.9.3': true });
+  const [openVersions, setOpenVersions] = useState({ '2.9.4': true });
   const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
   // ── Sidebar collapse state ────────────────────────────────────────────────
@@ -987,7 +976,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '2.9.3';
+  const APP_VERSION = '2.9.4';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1852,7 +1841,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '2.9.3'
+      version: '2.9.4'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2109,7 +2098,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '2.9.3'
+        version: '2.9.4'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -8354,7 +8343,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 2.9.3
+              Version 2.9.4
             </p>
           </div>
         </div>
@@ -8367,12 +8356,21 @@ function FarmWageManager() {
         // Changelog data — single source of truth
         const CHANGELOG = [
           {
-            version: '2.9.3',
+            version: '2.9.4',
             date: '2026-03-08',
             latest: true,
             stable: true,
             entries: [
-              { type: 'fix', text: 'Browser address bar / PWA chrome colour was hardcoded to #0077b6 via <meta name="theme-color">. The tag is now updated dynamically inside the theme useEffect — the address bar colour changes in sync with every theme switch, using the sidebar background tone of each theme.' },
+              { type: 'fix', text: 'App was blurring itself on tablets and phones. The DevTools window-size detector compared outerHeight vs innerHeight — browser chrome alone (status bar + address bar + navigation bar) consumes 200 px+ on Android, exceeding the 160 px threshold and blurring the app on every load. Detector removed entirely; all other source-protection layers remain active.' },
+              { type: 'fix', text: 'Browser address bar colour was showing stale/incorrect colour from the old cached file. Meta theme-color initial value corrected to #0f172a (dark navy) and confirmed to update dynamically on every theme change.' },
+            ]
+          },
+          {
+            version: '2.9.3',
+            date: '2026-03-08',
+            stable: true,
+            entries: [
+              { type: 'fix', text: 'Browser address bar / PWA chrome colour was hardcoded to #0077b6 via <meta name="theme-color">. Tag is now updated dynamically inside the theme useEffect — the address bar colour changes in sync with every theme switch, using the sidebar background tone of each theme.' },
             ]
           },
           {
@@ -8528,7 +8526,7 @@ function FarmWageManager() {
               </p>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
                 <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 2.9.3
+                  Version 2.9.4
                 </div>
                 <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
                   8 Mar 2026
