@@ -3,12 +3,19 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 2.9.1                                            ║
+  ║  Version      : 2.9.2                                            ║
   ║  Release Date : 2026-03-08                                       ║
   ║  Checksum     : f7b23d91c4e608eb78dd25fa03c491ge                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v2.9.2  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    * Bug fix: Mobile breakpoint lowered from 768 px to 600 px   ║
+  ║           — iPad mini (768 px portrait) was treated as mobile,  ║
+  ║           hiding the sidebar entirely. Now all tablets (≥ 601 px) ║
+  ║           show the collapsed icon-only sidebar; only phones      ║
+  ║           (≤ 600 px) use the slide-in drawer behaviour          ║
+  ║                                                                   ║
   ║  v2.9.1  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
   ║    + Backward-compatible restore: all 9 data collections now     ║
   ║           pass through per-entity migrate* functions before      ║
@@ -864,18 +871,21 @@ function FarmWageManager() {
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
   // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '2.9.1': true });
+  const [openVersions, setOpenVersions] = useState({ '2.9.2': true });
   const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
   // ── Sidebar collapse state ────────────────────────────────────────────────
   // Desktop/tablet: sidebar always visible in icon-only collapsed mode (sidebarOpen = false always)
   // Mobile: sidebarOpen controls the slide-in drawer
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  // Mobile = phones only (≤ 600 px).
+  // Tablets (iPad mini 768 px, iPad 820 px, etc.) and desktops are non-mobile
+  // and always show the sidebar in icon-only collapsed mode.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 600);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const onResize = () => {
-      const mobile = window.innerWidth <= 768;
+      const mobile = window.innerWidth <= 600;
       setIsMobile(mobile);
       // On mobile, close the drawer on resize to desktop; on desktop, keep always-collapsed
       if (!mobile) setSidebarOpen(false);
@@ -966,7 +976,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '2.9.1';
+  const APP_VERSION = '2.9.2';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1831,7 +1841,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '2.9.1'
+      version: '2.9.2'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2088,7 +2098,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '2.9.1'
+        version: '2.9.2'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -8333,7 +8343,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 2.9.1
+              Version 2.9.2
             </p>
           </div>
         </div>
@@ -8346,9 +8356,17 @@ function FarmWageManager() {
         // Changelog data — single source of truth
         const CHANGELOG = [
           {
-            version: '2.9.1',
+            version: '2.9.2',
             date: '2026-03-08',
             latest: true,
+            stable: true,
+            entries: [
+              { type: 'fix', text: 'Mobile breakpoint lowered from 768 px to 600 px. iPad mini (768 px portrait) was incorrectly treated as a mobile device, hiding the sidebar entirely. All tablets (≥ 601 px) now correctly show the collapsed icon-only sidebar; only phones (≤ 600 px) use the slide-in drawer.' },
+            ]
+          },
+          {
+            version: '2.9.1',
+            date: '2026-03-08',
             stable: true,
             entries: [
               { type: 'add',    text: 'Backward-compatible restore: all 9 data collections pass through per-entity migration functions before being written to state — every field added across app versions is back-filled with a safe default.' },
@@ -8491,7 +8509,7 @@ function FarmWageManager() {
               </p>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
                 <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 2.9.1
+                  Version 2.9.2
                 </div>
                 <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
                   8 Mar 2026
