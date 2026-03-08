@@ -3,12 +3,20 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 2.9.2                                            ║
+  ║  Version      : 2.9.3                                            ║
   ║  Release Date : 2026-03-08                                       ║
   ║  Checksum     : f7b23d91c4e608eb78dd25fa03c491ge                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v2.9.3  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
+  ║    * Bug fix: Browser address bar / PWA chrome colour was        ║
+  ║           hardcoded to #0077b6 (teal-blue) via                  ║
+  ║           <meta name="theme-color">. Tag is now updated          ║
+  ║           dynamically in the theme useEffect to match            ║
+  ║           --sidebar-bg of the active theme, so the address bar   ║
+  ║           colour changes in sync with every theme switch         ║
+  ║                                                                   ║
   ║  v2.9.2  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
   ║    * Bug fix: Mobile breakpoint lowered from 768 px to 600 px   ║
   ║           — iPad mini (768 px portrait) was treated as mobile,  ║
@@ -162,7 +170,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#0077b6">
+  <meta id="meta-theme-color" name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Farm Manager">
@@ -871,7 +879,7 @@ function FarmWageManager() {
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
   // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '2.9.2': true });
+  const [openVersions, setOpenVersions] = useState({ '2.9.3': true });
   const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
   // ── Sidebar collapse state ────────────────────────────────────────────────
@@ -928,6 +936,9 @@ function FarmWageManager() {
     root.style.setProperty('--sidebar-bg',        sidebarBgMap[currentTheme] || '#0d1f3c');
     root.style.setProperty('--sidebar-active-bg', t.primary + '28'); // primary at ~16% opacity
     root.style.setProperty('--sidebar-active-fg', t.primary);
+    // Browser address-bar / PWA chrome colour — keep in sync with sidebar background
+    const metaTheme = document.getElementById('meta-theme-color');
+    if (metaTheme) metaTheme.setAttribute('content', sidebarBgMap[currentTheme] || '#0d1f3c');
     // Reflect dark/light on <html> for any global selectors that need it
     root.setAttribute('data-theme-mode', isDark ? 'dark' : 'light');
   }, [currentTheme]);
@@ -976,7 +987,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '2.9.2';
+  const APP_VERSION = '2.9.3';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1841,7 +1852,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '2.9.2'
+      version: '2.9.3'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2098,7 +2109,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '2.9.2'
+        version: '2.9.3'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -8343,7 +8354,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 2.9.2
+              Version 2.9.3
             </p>
           </div>
         </div>
@@ -8356,9 +8367,17 @@ function FarmWageManager() {
         // Changelog data — single source of truth
         const CHANGELOG = [
           {
-            version: '2.9.2',
+            version: '2.9.3',
             date: '2026-03-08',
             latest: true,
+            stable: true,
+            entries: [
+              { type: 'fix', text: 'Browser address bar / PWA chrome colour was hardcoded to #0077b6 via <meta name="theme-color">. The tag is now updated dynamically inside the theme useEffect — the address bar colour changes in sync with every theme switch, using the sidebar background tone of each theme.' },
+            ]
+          },
+          {
+            version: '2.9.2',
+            date: '2026-03-08',
             stable: true,
             entries: [
               { type: 'fix', text: 'Mobile breakpoint lowered from 768 px to 600 px. iPad mini (768 px portrait) was incorrectly treated as a mobile device, hiding the sidebar entirely. All tablets (≥ 601 px) now correctly show the collapsed icon-only sidebar; only phones (≤ 600 px) use the slide-in drawer.' },
@@ -8509,7 +8528,7 @@ function FarmWageManager() {
               </p>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
                 <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 2.9.2
+                  Version 2.9.3
                 </div>
                 <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
                   8 Mar 2026

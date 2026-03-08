@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v2.9.2';
+const CACHE_VERSION = 'v2.9.3';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
