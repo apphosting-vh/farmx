@@ -3,12 +3,29 @@
   ╔══════════════════════════════════════════════════════════════════╗
   ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 3.0.1                                            ║
-  ║  Release Date : 2026-03-14                                       ║
-  ║  Checksum     : a3c91ef72b4d085fc61e37ab28d902hf                 ║
+  ║  Version      : 4.0.0                                            ║
+  ║  Release Date : 2026-04-04                                       ║
+  ║  Checksum     : b7d04af83c5e196gd72f48bc39e013ig                 ║
   ╠══════════════════════════════════════════════════════════════════╣
   ║  CHANGELOG                                                        ║
   ║  ─────────────────────────────────────────────────────────────   ║
+  ║  v4.0.0  (2026-04-04)  ★ MAJOR RELEASE ★                        ║
+  ║    * Bug fix: Expand All (⊞) now correctly expands ALL months    ║
+  ║           in Seasonal Work, Expenses, and Project Works —        ║
+  ║           broken sentinel logic ('open:' key) replaced with      ║
+  ║           simple has(key) check; empty set = all expanded        ║
+  ║    * Bug fix: Seasonal Work, Expenses, Project Works — all       ║
+  ║           month groups now load expanded by default instead of   ║
+  ║           only the newest/first month                            ║
+  ║    * Bug fix: General Notes — all notes now load expanded by     ║
+  ║           default; state convention flipped from expandedSet     ║
+  ║           (presence=open) to collapsedSet (presence=closed)      ║
+  ║           so empty initial state = all notes expanded            ║
+  ║    * Bug fix: General Notes Expand All / Collapse All buttons    ║
+  ║           were wired in reverse — now correctly fixed            ║
+  ║    * Bug fix: New notes added to General Notes auto-expand       ║
+  ║           (not in collapsed set by default)                      ║
+  ║                                                                   ║
   ║  v3.0.1  (2026-03-14)                                            ║
   ║    + General Notes: all notes load collapsed by default;         ║
   ║           clicking any note header expands/collapses it          ║
@@ -948,7 +965,7 @@ function FarmWageManager() {
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
   // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '3.0.1': true });
+  const [openVersions, setOpenVersions] = useState({ '4.0.0': true });
   const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
 
   // ── Sidebar collapse state ────────────────────────────────────────────────
@@ -1034,9 +1051,9 @@ function FarmWageManager() {
   const [editingGeneralNote, setEditingGeneralNote] = useState(null);
   const [generalNoteData, setGeneralNoteData] = useState({ title: '', body: '' });
   // Empty Set = all notes collapsed by default; add a note id to expand it
-  const [expandedGeneralNotes, setExpandedGeneralNotes] = useState(new Set());
+  const [collapsedGeneralNotes, setCollapsedGeneralNotes] = useState(new Set());
   const toggleGeneralNote = useCallback((id) => {
-    setExpandedGeneralNotes(prev => {
+    setCollapsedGeneralNotes(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -1071,7 +1088,7 @@ function FarmWageManager() {
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '3.0.1';
+  const APP_VERSION = '4.0.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1975,7 +1992,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '3.0.1'
+      version: '4.0.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2232,7 +2249,7 @@ function FarmWageManager() {
         expenses,
         contractWorks,
         exportDate: new Date().toISOString(),
-        version: '3.0.1'
+        version: '4.0.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -5989,13 +6006,6 @@ function FarmWageManager() {
             return next;
           });
         };
-        // default: all collapsed except the first (newest) month
-        const isMonthCollapsed = (key, idx) =>
-          collapsedSeasonalMonths.has(key)
-            ? true
-            : collapsedSeasonalMonths.has('__init__' + key)
-              ? false
-              : idx !== 0; // newest open by default
 
         return (
           <div style={{ padding: '20px' }}>
@@ -6048,7 +6058,7 @@ function FarmWageManager() {
                   const label = `${MONTH_NAMES[parseInt(mo) - 1]} ${yr}`;
                   const entries = monthGroups[key];
                   const monthTotal = entries.reduce((s, w) => s + w.rate * w.totalConsumed, 0);
-                  const collapsed = collapsedSeasonalMonths.has(key) || (!collapsedSeasonalMonths.has('open:' + key) && idx !== 0);
+                  const collapsed = collapsedSeasonalMonths.has(key);
 
                   return (
                     <div key={key} style={{ background: 'var(--card)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
@@ -6208,7 +6218,7 @@ function FarmWageManager() {
                   const label = `${MONTH_NAMES[parseInt(mo) - 1]} ${yr}`;
                   const entries = monthGroups[key];
                   const monthTotal = entries.reduce((s, e) => s + e.cost, 0);
-                  const collapsed = collapsedExpenseMonths.has(key) || (!collapsedExpenseMonths.has('open:' + key) && idx !== 0);
+                  const collapsed = collapsedExpenseMonths.has(key);
 
                   return (
                     <div key={key} style={{ background: 'var(--card)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
@@ -6349,7 +6359,7 @@ function FarmWageManager() {
                   const label = `${MONTH_NAMES[parseInt(mo) - 1]} ${yr}`;
                   const entries = monthGroups[key];
                   const monthTotal = entries.reduce((s, c) => s + (parseFloat(c.contractCost) || 0), 0);
-                  const collapsed = collapsedContractMonths.has(key) || (!collapsedContractMonths.has('open:' + key) && idx !== 0);
+                  const collapsed = collapsedContractMonths.has(key);
 
                   return (
                     <div key={key} style={{ background: 'var(--card)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
@@ -8007,7 +8017,7 @@ function FarmWageManager() {
               {generalNotes.length > 0 && (
                 <>
                   <button
-                    onClick={() => setExpandedGeneralNotes(new Set(generalNotes.map(n => n.id)))}
+                    onClick={() => setCollapsedGeneralNotes(new Set())}
                     title="Expand all notes"
                     style={{
                       background: 'none', border: '2px solid #f39c12', borderRadius: '8px',
@@ -8016,7 +8026,7 @@ function FarmWageManager() {
                     }}
                   >⊞ All</button>
                   <button
-                    onClick={() => setExpandedGeneralNotes(new Set())}
+                    onClick={() => setCollapsedGeneralNotes(new Set(generalNotes.map(n => n.id)))}
                     title="Collapse all notes"
                     style={{
                       background: 'none', border: '2px solid #f39c12', borderRadius: '8px',
@@ -8076,7 +8086,7 @@ function FarmWageManager() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {generalNotes.map(note => {
-                const isExpanded = expandedGeneralNotes.has(note.id);
+                const isExpanded = !collapsedGeneralNotes.has(note.id);
                 const hasBody = !!(note.body && note.body.trim());
                 // Preview: first line or first 80 chars of body for collapsed state
                 const preview = hasBody
@@ -8736,9 +8746,22 @@ function FarmWageManager() {
         // Changelog data — single source of truth
         const CHANGELOG = [
           {
+            version: '4.0.0',
+            date: '2026-04-04',
+            latest: true,
+            stable: true,
+            entries: [
+              { type: 'fix', text: 'Expand All (⊞) now correctly expands ALL months in Seasonal Work, Expenses, and Project Works — broken sentinel logic ("open:" key) replaced with simple has(key) check; empty set = all expanded.' },
+              { type: 'fix', text: 'Seasonal Work, Expenses, Project Works — all month groups now load expanded by default instead of only the newest month.' },
+              { type: 'fix', text: 'General Notes — all notes now load expanded by default; state convention flipped from expandedSet (presence=open) to collapsedSet (presence=closed) so empty initial state = all notes expanded.' },
+              { type: 'fix', text: 'General Notes Expand All / Collapse All buttons were wired in reverse — now correctly fixed.' },
+              { type: 'fix', text: 'New notes added to General Notes auto-expand (not in collapsed set by default).' },
+            ]
+          },
+          {
             version: '3.0.1',
             date: '2026-03-14',
-            latest: true,
+            latest: false,
             stable: true,
             entries: [
               { type: 'add', text: 'General Notes: all notes load collapsed by default. Click any note header to expand or collapse its body.' },
@@ -8948,10 +8971,10 @@ function FarmWageManager() {
               </p>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
                 <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 3.0.1
+                  Version 4.0.0
                 </div>
                 <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
-                  8 Mar 2026
+                  4 Apr 2026
                 </div>
               </div>
             </div>
