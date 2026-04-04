@@ -930,6 +930,7 @@ function FarmWageManager() {
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [editingSeasonalWork, setEditingSeasonalWork] = useState(null);
   const [seasonalData, setSeasonalData] = useState({ title: '', rateType: 'hourly', rate: '', startDate: '', endDate: '', totalConsumed: '', notes: '' });
+  const [dayEntries, setDayEntries] = useState([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [expenseData, setExpenseData] = useState(() => ({ title: '', cost: '', purchaseDate: formatLocalDate(new Date()), unit: '', quantity: '', notes: '' }));
@@ -1231,8 +1232,15 @@ function FarmWageManager() {
 
   // Seasonal Work Management
   const addSeasonalWorkFromModal = () => {
-    if (!seasonalData.title || !seasonalData.rate || !seasonalData.startDate || !seasonalData.endDate || !seasonalData.totalConsumed) {
-      alert('Please fill in all required fields');
+    if (!seasonalData.title || !seasonalData.rate || !seasonalData.startDate || !seasonalData.endDate) {
+      alert('Please fill in all required fields (Title, Rate, Start Date, End Date)');
+      return;
+    }
+    // Auto-compute totalConsumed from dayEntries if entries exist; otherwise fall back to manual field
+    const dayEntriesTotal = dayEntries.reduce((sum, e) => sum + (parseFloat(e.hoursWorked) || 0), 0);
+    const finalTotal = dayEntries.length > 0 ? dayEntriesTotal : parseFloat(seasonalData.totalConsumed) || 0;
+    if (!finalTotal && finalTotal !== 0) {
+      alert('Please add day entries or enter total hours/days consumed');
       return;
     }
     
@@ -1247,8 +1255,9 @@ function FarmWageManager() {
               rate: parseFloat(seasonalData.rate),
               startDate: seasonalData.startDate,
               endDate: seasonalData.endDate,
-              totalConsumed: parseFloat(seasonalData.totalConsumed),
-              notes: seasonalData.notes
+              totalConsumed: finalTotal,
+              notes: seasonalData.notes,
+              dayEntries: dayEntries
             }
           : sw
       ));
@@ -1261,13 +1270,15 @@ function FarmWageManager() {
         rate: parseFloat(seasonalData.rate),
         startDate: seasonalData.startDate,
         endDate: seasonalData.endDate,
-        totalConsumed: parseFloat(seasonalData.totalConsumed),
+        totalConsumed: finalTotal,
         notes: seasonalData.notes,
+        dayEntries: dayEntries,
         assignedWorkers: []
       });
     }
     
     setSeasonalData({ title: '', rateType: 'hourly', rate: '', startDate: '', endDate: '', totalConsumed: '', notes: '' });
+    setDayEntries([]);
     setShowSeasonalModal(false);
   };
 
@@ -1290,6 +1301,7 @@ function FarmWageManager() {
       totalConsumed: work.totalConsumed.toString(),
       notes: work.notes || ''
     });
+    setDayEntries(work.dayEntries || []);
     setShowSeasonalModal(true);
   };
 
@@ -4461,7 +4473,7 @@ function FarmWageManager() {
             background: 'var(--card)',
             borderRadius: '20px',
             padding: '24px',
-            maxWidth: '500px',
+            maxWidth: '680px',
             width: '100%',
             boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
             maxHeight: '90vh',
@@ -4626,7 +4638,7 @@ function FarmWageManager() {
               </div>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
               <label style={{
                 display: 'block',
                 fontSize: '14px',
@@ -4638,8 +4650,13 @@ function FarmWageManager() {
               </label>
               <input
                 type="number"
-                value={seasonalData.totalConsumed}
-                onChange={(e) => setSeasonalData({ ...seasonalData, totalConsumed: e.target.value })}
+                value={dayEntries.length > 0
+                  ? dayEntries.reduce((s, e) => s + (parseFloat(e.hoursWorked) || 0), 0).toFixed(2)
+                  : seasonalData.totalConsumed}
+                onChange={(e) => {
+                  if (dayEntries.length === 0) setSeasonalData({ ...seasonalData, totalConsumed: e.target.value });
+                }}
+                readOnly={dayEntries.length > 0}
                 placeholder={`Enter total ${seasonalData.rateType === 'hourly' ? 'hours' : 'days'}`}
                 style={{
                   width: '100%',
@@ -4648,18 +4665,170 @@ function FarmWageManager() {
                   borderRadius: '12px',
                   fontSize: '16px',
                   fontFamily: 'inherit',
-                  outline: 'none'
+                  outline: 'none',
+                  background: dayEntries.length > 0 ? 'var(--surface)' : undefined,
+                  color: dayEntries.length > 0 ? 'var(--text-3)' : undefined
                 }}
               />
-              {seasonalData.rate && seasonalData.totalConsumed && (
+              {dayEntries.length > 0 && (
+                <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-3)' }}>
+                  Auto-calculated from day entries below
+                </p>
+              )}
+              {seasonalData.rate && (dayEntries.length > 0
+                ? dayEntries.reduce((s, e) => s + (parseFloat(e.hoursWorked) || 0), 0) > 0
+                : seasonalData.totalConsumed) && (
                 <p style={{
                   margin: '8px 0 0 0',
                   fontSize: '14px',
                   color: '#f39c12',
                   fontWeight: '600'
                 }}>
-                  Total Cost: ₹{(parseFloat(seasonalData.rate) * parseFloat(seasonalData.totalConsumed)).toFixed(2)}
+                  Total Cost: ₹{(parseFloat(seasonalData.rate) * (dayEntries.length > 0
+                    ? dayEntries.reduce((s, e) => s + (parseFloat(e.hoursWorked) || 0), 0)
+                    : parseFloat(seasonalData.totalConsumed) || 0)).toFixed(2)}
                 </p>
+              )}
+            </div>
+
+            {/* Day-wise Entries Table */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-1)' }}>
+                  📅 Day-wise Entries
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDayEntries([...dayEntries, { id: Date.now(), title: '', date: '', hoursWorked: '', comments: '' }])}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  + Add Row
+                </button>
+              </div>
+
+              {dayEntries.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  background: 'var(--surface)',
+                  borderRadius: '10px',
+                  border: '1.5px dashed var(--border)',
+                  color: 'var(--text-3)',
+                  fontSize: '13px'
+                }}>
+                  No day entries yet. Click "+ Add Row" to log daily hours.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '480px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface)' }}>
+                        {['Title', 'Date', 'Hours Worked', 'Comments', ''].map((col, i) => (
+                          <th key={i} style={{
+                            padding: '9px 8px',
+                            textAlign: i === 2 ? 'right' : 'left',
+                            fontWeight: '700',
+                            color: 'var(--text-2)',
+                            fontSize: '12px',
+                            borderBottom: '1.5px solid var(--border)',
+                            whiteSpace: 'nowrap'
+                          }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dayEntries.map((entry, idx) => (
+                        <tr key={entry.id} style={{ background: idx % 2 === 0 ? 'var(--card)' : 'var(--surface)' }}>
+                          <td style={{ padding: '6px 6px' }}>
+                            <input
+                              type="text"
+                              value={entry.title}
+                              onChange={e => setDayEntries(dayEntries.map(d => d.id === entry.id ? { ...d, title: e.target.value } : d))}
+                              placeholder="Task title"
+                              style={{
+                                width: '100%', padding: '6px 8px', border: '1.5px solid var(--border)',
+                                borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none', minWidth: '90px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 6px' }}>
+                            <input
+                              type="date"
+                              value={entry.date}
+                              onChange={e => setDayEntries(dayEntries.map(d => d.id === entry.id ? { ...d, date: e.target.value } : d))}
+                              style={{
+                                width: '100%', padding: '6px 8px', border: '1.5px solid var(--border)',
+                                borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 6px' }}>
+                            <input
+                              type="number"
+                              value={entry.hoursWorked}
+                              onChange={e => setDayEntries(dayEntries.map(d => d.id === entry.id ? { ...d, hoursWorked: e.target.value } : d))}
+                              placeholder="0"
+                              min="0"
+                              step="0.5"
+                              style={{
+                                width: '72px', padding: '6px 8px', border: '1.5px solid var(--border)',
+                                borderRadius: '7px', fontSize: '13px', fontFamily: 'DM Mono, monospace', outline: 'none', textAlign: 'right'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 6px' }}>
+                            <input
+                              type="text"
+                              value={entry.comments}
+                              onChange={e => setDayEntries(dayEntries.map(d => d.id === entry.id ? { ...d, comments: e.target.value } : d))}
+                              placeholder="Notes…"
+                              style={{
+                                width: '100%', padding: '6px 8px', border: '1.5px solid var(--border)',
+                                borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none', minWidth: '80px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 6px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setDayEntries(dayEntries.filter(d => d.id !== entry.id))}
+                              style={{
+                                background: '#fee2e2', color: '#dc2626', border: 'none',
+                                borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '14px', lineHeight: 1
+                              }}
+                              title="Remove row"
+                            >✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#fff3cd', borderTop: '2px solid #f39c12' }}>
+                        <td colSpan="2" style={{ padding: '9px 8px', fontWeight: '700', fontSize: '13px', color: '#856404' }}>
+                          Total Hours
+                        </td>
+                        <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: '700', fontSize: '14px', color: '#856404', fontFamily: 'DM Mono, monospace' }}>
+                          {dayEntries.reduce((s, e) => s + (parseFloat(e.hoursWorked) || 0), 0).toFixed(2)}
+                        </td>
+                        <td colSpan="2" style={{ padding: '9px 8px', fontSize: '12px', color: '#856404' }}>
+                          hrs across {dayEntries.filter(e => e.hoursWorked).length} entr{dayEntries.filter(e => e.hoursWorked).length === 1 ? 'y' : 'ies'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -4698,6 +4867,7 @@ function FarmWageManager() {
                   setShowSeasonalModal(false);
                   setEditingSeasonalWork(null);
                   setSeasonalData({ title: '', rateType: 'hourly', rate: '', startDate: '', endDate: '', totalConsumed: '', notes: '' });
+                  setDayEntries([]);
                 }}
                 style={{
                   flex: 1,
