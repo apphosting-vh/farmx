@@ -1,247 +1,6 @@
 <!DOCTYPE html>
 <!--
-  ╔══════════════════════════════════════════════════════════════════╗
-  ║           FARM MANAGER — STABLE PRODUCTION BASE                  ║
-  ╠══════════════════════════════════════════════════════════════════╣
-  ║  Version      : 4.0.0                                            ║
-  ║  Release Date : 2026-04-04                                       ║
-  ║  Checksum     : b7d04af83c5e196gd72f48bc39e013ig                 ║
-  ╠══════════════════════════════════════════════════════════════════╣
-  ║  CHANGELOG                                                        ║
-  ║  ─────────────────────────────────────────────────────────────   ║
-  ║  v4.0.0  (2026-04-04)  ★ MAJOR RELEASE ★                        ║
-  ║    * Bug fix: Expand All (⊞) now correctly expands ALL months    ║
-  ║           in Seasonal Work, Expenses, and Project Works —        ║
-  ║           broken sentinel logic ('open:' key) replaced with      ║
-  ║           simple has(key) check; empty set = all expanded        ║
-  ║    * Bug fix: Seasonal Work, Expenses, Project Works — all       ║
-  ║           month groups now load expanded by default instead of   ║
-  ║           only the newest/first month                            ║
-  ║    * Bug fix: General Notes — all notes now load expanded by     ║
-  ║           default; state convention flipped from expandedSet     ║
-  ║           (presence=open) to collapsedSet (presence=closed)      ║
-  ║           so empty initial state = all notes expanded            ║
-  ║    * Bug fix: General Notes Expand All / Collapse All buttons    ║
-  ║           were wired in reverse — now correctly fixed            ║
-  ║    * Bug fix: New notes added to General Notes auto-expand       ║
-  ║           (not in collapsed set by default)                      ║
-  ║                                                                   ║
-  ║  v3.0.1  (2026-03-14)                                            ║
-  ║    + General Notes: all notes load collapsed by default;         ║
-  ║           clicking any note header expands/collapses it          ║
-  ║    + General Notes: chevron indicator shows expanded state       ║
-  ║    + General Notes: collapsed cards show a one-line body preview ║
-  ║    + General Notes: ⊞ / ⊟ Expand All / Collapse All buttons     ║
-  ║    + General Notes: note count shown in page heading             ║
-  ║    + General Notes: Edit/Delete buttons stop propagation so      ║
-  ║           they work independently of the collapse toggle         ║
-  ║                                                                   ║
-  ║  v3.0.0  (2026-03-14)  ★ PERFORMANCE RELEASE ★                  ║
-  ║    * Perf: useMemo+useCallback imported; React.memo applied to   ║
-  ║           NavButton, ActionButton, StatCard, AttendanceCell,     ║
-  ║           PrevMonthsPanel — hidden views no longer re-render     ║
-  ║    * Perf: Balance cache (useRef Map) — getClosingBalance now    ║
-  ║           O(1) on repeated calls; cache auto-cleared when        ║
-  ║           workers/attendance/payments change (useMemo gate)      ║
-  ║    * Perf: getStats() wrapped in useMemo — recalculates only     ║
-  ║           when workers or attendance data changes                ║
-  ║    * Perf: localStorage writes debounced 400 ms — typing no      ║
-  ║           longer triggers synchronous JSON.stringify+setItem     ║
-  ║           on every keystroke                                     ║
-  ║    * Perf: CSS utility classes added (fm-page, fm-card,          ║
-  ║           fm-empty, fm-list, fm-btn-primary, fm-section-hdr)     ║
-  ║           replacing the most repeated inline style objects       ║
-  ║    * Perf: Key event handlers wrapped in useCallback             ║
-  ║           (handleNavClick, markAttendance, toggleWorkerStatus,   ║
-  ║           deleteWorker, addPayment, deletePayment,               ║
-  ║           navigateCalendar, navigateReportMonth)                 ║
-  ║    * Perf: console.clear interval raised 2 s → 60 s —           ║
-  ║           same deterrent, 30× less main-thread noise             ║
-  ║    * Perf: todayDisplay date string computed once on mount       ║
-  ║           instead of recalculating on every render               ║
-  ║    * Zero app-logic or UI changes — all fixes are purely         ║
-  ║           internal runtime optimisations                         ║
-  ║                                                                   ║
-  ║  v2.9.5  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    + UX: Collapsed tablet sidebar now shows label below each     ║
-  ║           icon — nav items are no longer anonymous symbols       ║
-  ║    + UX: Nav icons enlarged to 24×24 px in collapsed tablet      ║
-  ║           mode for better tap targets and visibility             ║
-  ║    + UX: Collapsed sidebar width increased to 76 px to fit       ║
-  ║           icon + label layout comfortably                        ║
-  ║    + UX: Tapping the farm logo on tablet toggles sidebar         ║
-  ║           between collapsed and full expanded drawer; ‹ chevron  ║
-  ║           appears as a collapse hint; backdrop tap collapses     ║
-  ║                                                                   ║
-  ║  v2.9.4  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    * Bug fix: App was blurring itself on tablets/phones because   ║
-  ║           the DevTools window-size detector compared             ║
-  ║           outerHeight vs innerHeight — browser chrome alone      ║
-  ║           (status bar + address bar + nav bar) consumes 200 px+  ║
-  ║           on Android, exceeding the 160 px threshold and         ║
-  ║           triggering blur on every page load. Detector removed.  ║
-  ║           All other source-protection layers remain active.      ║
-  ║    * Bug fix: Browser address bar colour hardcoded to old teal   ║
-  ║           value in <meta name="theme-color"> — now set to        ║
-  ║           #0f172a (Arctic dark) on load and updated dynamically  ║
-  ║           in theme useEffect to match the active theme's         ║
-  ║           sidebar background colour on every theme switch        ║
-  ║                                                                   ║
-  ║  v2.9.3  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    * Bug fix: Browser address bar / PWA chrome colour was        ║
-  ║           hardcoded to #0077b6 (teal-blue) via                  ║
-  ║           <meta name="theme-color">. Tag is now updated          ║
-  ║           dynamically in the theme useEffect to match            ║
-  ║           --sidebar-bg of the active theme, so the address bar   ║
-  ║           colour changes in sync with every theme switch         ║
-  ║                                                                   ║
-  ║  v2.9.2  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    * Bug fix: Mobile breakpoint lowered from 768 px to 600 px   ║
-  ║           — iPad mini (768 px portrait) was treated as mobile,  ║
-  ║           hiding the sidebar entirely. Now all tablets (≥ 601 px) ║
-  ║           show the collapsed icon-only sidebar; only phones      ║
-  ║           (≤ 600 px) use the slide-in drawer behaviour          ║
-  ║                                                                   ║
-  ║  v2.9.1  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    + Backward-compatible restore: all 9 data collections now     ║
-  ║           pass through per-entity migrate* functions before      ║
-  ║           being written to state — every field that was added    ║
-  ║           across versions is back-filled with a safe default     ║
-  ║    + migrateWorker: phone, openingBalance, type, active,         ║
-  ║           createdAt defaulted if absent                          ║
-  ║    + migratePayment: type defaulted to 'payment' (critical for   ║
-  ║           wage balance calc); notes and createdAt defaulted      ║
-  ║    + migrateContractWork: totalItemCost, totalLaborCost, items   ║
-  ║           array defaulted; all numeric fields coerced            ║
-  ║    + migrateSeasonalWork: assignedWorkers array defaulted        ║
-  ║    + migrateContact: whatsapp, location, rate defaulted          ║
-  ║    + migrateGeneralNote: updatedAt defaulted                     ║
-  ║    + migrateExpense / migrateSpecialNote / migrateAttendance:    ║
-  ║           createdAt and optional fields defaulted                ║
-  ║    + migrateBackup: top-level function — handles absent keys     ║
-  ║           (e.g. contacts missing in v1 backups) gracefully       ║
-  ║    + Restore confirmation now shows backup version, export date  ║
-  ║           and record counts before overwriting                   ║
-  ║    + Restore validity check relaxed: only workers array is       ║
-  ║           required (attendance was also required before, failing ║
-  ║           on day-0 backups with no attendance yet)               ║
-  ║    * Google Drive restore path updated with same migration layer ║
-  ║                                                                   ║
-  ║  v2.9.0  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    + Source Protection: right-click context menu disabled        ║
-  ║    + Source Protection: F12, Ctrl+Shift+I/J/C (DevTools),       ║
-  ║           Ctrl+U (View Source), Ctrl+S (Save), Ctrl+P (Print)   ║
-  ║           keyboard shortcuts all suppressed                      ║
-  ║    + Source Protection: CSS user-select:none globally;           ║
-  ║           re-enabled for input/textarea/select so data entry     ║
-  ║           and editing are fully unaffected                       ║
-  ║    + Source Protection: Ctrl+A (Select All) blocked on page      ║
-  ║           but passes through when focus is on an input,          ║
-  ║           textarea or select — no interference with app forms    ║
-  ║    + Source Protection: DevTools docked-mode detection via       ║
-  ║           outerWidth/innerWidth delta — blurs app body when      ║
-  ║           DevTools panel is detected open                        ║
-  ║    + Source Protection: console cleared every 2 s with a        ║
-  ║           private-app warning replacing any output               ║
-  ║    + Source Protection: beforeprint / print suppressed           ║
-  ║    * Confirmed: all localStorage data, backup/restore,           ║
-  ║           file input, attendance, payments, notes — zero         ║
-  ║           interference from protection layer                     ║
-  ║    + UX: Sidebar always collapsed (icon-only) on desktop/tablet; ║
-  ║           never auto-expands — hamburger hidden on desktop        ║
-  ║    + UX: Sidebar background and active-item highlight colour     ║
-  ║           now derived from active theme (--sidebar-bg,           ║
-  ║           --sidebar-active-bg, --sidebar-active-fg CSS vars)    ║
-  ║                                                                   ║
-  ║  v2.8.0  (2026-03-08)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    * Bug fix: Future-month navigation — "Next" button now uses    ║
-  ║           year-first comparison; &&-logic allowed scrolling into  ║
-  ║           future years when month < current month (Attendance,   ║
-  ║           Reports)                                                ║
-  ║    * Bug fix: Payment type (Payment/Credit) now editable on edit ║
-  ║           — toggle shown during edit and type saved on update     ║
-  ║    * Bug fix: Deleting a worker now also deletes their Special    ║
-  ║           Notes; previously notes were orphaned in localStorage   ║
-  ║    * Bug fix: isFuture now parses YYYY-MM-DD as local midnight   ║
-  ║           (was UTC → 5:30 AM IST off-by-one in attendance)       ║
-  ║    * Bug fix: Collapsed worker/payment headers now use CSS vars  ║
-  ║           (--surface/--card) instead of hardcoded light colours   ║
-  ║    + Worker Notes: Edit button added — full edit/update flow     ║
-  ║    + Project Works: item costs auto-summed into Total Item Cost  ║
-  ║    * Bug fix: Dashboard Monthly Wages excludes inactive workers   ║
-  ║                                                                   ║
-  ║  v2.6.0  (2026-03-08)                                            ║
-  ║    * Bug fix: Theme switcher now correctly rewrites all CSS        ║
-  ║           custom properties (--surface, --card, --text-1, etc.)  ║
-  ║           via a useEffect on currentTheme — previously clicking  ║
-  ║           a theme only updated the picker UI, not the app        ║
-  ║    - Removed Online Backup (Google Drive) section from Settings  ║
-  ║    + App Info: full version history & changelog accordion added  ║
-  ║                                                                   ║
-  ║  v2.5.0  (2026-03-08)                                            ║
-  ║    + Auto Update Notification: detects new GitHub Pages deploys  ║
-  ║           via 3 independent channels — SW updatefound event,     ║
-  ║           custom swUpdateReady event from inline script, and     ║
-  ║           version-string poll against live page (every 30 min)   ║
-  ║    + Toast banner with animated slide-up + pulse glow effect;    ║
-  ║           "Update Now" triggers SKIP_WAITING → controllerchange  ║
-  ║           → auto-reload; "Later" dismisses for the session       ║
-  ║    + SW registration script now exposes window.__swReg and       ║
-  ║           fires swUpdateReady custom event on state change       ║
-  ║                                                                   ║
-  ║  v2.4.0  (2026-03-02)  ★ STABLE PRODUCTION BASE ★               ║
-  ║    * Bug fix: Attendance calendar popups (Special Note, Opening   ║
-  ║           Balance, Attendance menu) now use position:fixed +      ║
-  ║           getBoundingClientRect() for smart viewport-aware        ║
-  ║           placement — flips above cell when near bottom edge,     ║
-  ║           clamps horizontally so right-edge/left-edge cells       ║
-  ║           never clip outside the screen boundary                  ║
-  ║    * Bug fix: All three popup types escape overflow:hidden parent  ║
-  ║           containers via fixed positioning; shared Popup helper   ║
-  ║           eliminates duplicated backdrop logic                    ║
-  ║                                                                   ║
-  ║  v2.3.0  (2026-03-01)                                            ║
-  ║    + Attendance: collapse/expand calendar per worker by tapping   ║
-  ║           worker name; chevron indicator; compact attendance      ║
-  ║           summary pills when collapsed; ⊞/⊟ expand/collapse all  ║
-  ║    + Payments: collapse/expand full payment card per worker;      ║
-  ║           summary pills show earnings, paid, credit, past txns    ║
-  ║           when collapsed; ⊞/⊟ expand/collapse all                ║
-  ║    + Seasonal Work: month-grouped accordion within year filter;   ║
-  ║           newest month auto-expanded; ⊞/⊟ all; per-month total   ║
-  ║    + Expenses: month-grouped accordion within year filter;        ║
-  ║           per-month item count and total; ⊞/⊟ all                ║
-  ║    + Project Works: month-grouped accordion within year filter;   ║
-  ║           per-month project count and contract cost; ⊞/⊟ all     ║
-  ║    + Year navigation resets month collapse state on all pages     ║
-  ║                                                                   ║
-  ║  v2.2.0  (2026-03-01)                                            ║
-  ║    + App Info tab: copyright & IP notice, owner attribution       ║
-  ║      accessible via sidebar nav and dashboard quick actions       ║
-  ║                                                                   ║
-  ║  v2.1.0  (2026-03-01)                                            ║
-  ║    + PWA: viewport-fit=cover for notch/punch-hole support         ║
-  ║    + PWA: 100dvh dynamic viewport height — Chrome toolbar fix     ║
-  ║    + PWA: env(safe-area-inset-*) on body, header, sidebar,        ║
-  ║           loading screen and all sticky-bottom modal footers      ║
-  ║    + Worker Notes: month-wise grouping with chevron navigation,   ║
-  ║           quick-jump pills, smart empty states, UTC date fix       ║
-  ║    + Payments: collapsible Previous Month Transactions panel       ║
-  ║           per worker, two-level month accordion, auto-expands      ║
-  ║           most recent month, full edit/delete on past records      ║
-  ║                                                                   ║
-  ║  v2.0.0  Multi-module farm management app                         ║
-  ║    Workers, Attendance, Payments, Worker Notes, Seasonal Work,    ║
-  ║    Expenses, Project Works, Phonebook, Reports, General Notes,    ║
-  ║    Settings, Themes, localStorage persistence, Backup/Restore     ║
-  ╠══════════════════════════════════════════════════════════════════╣
-  ║  STACK                                                            ║
-  ║    React 18 (UMD CDN) · Babel Standalone · Vanilla CSS            ║
-  ║    Single HTML file · No build step · GitHub Pages + PWA          ║
-  ╠══════════════════════════════════════════════════════════════════╣
-  ║  NOTE: Do not modify this file directly for experiments.          ║
-  ║  Copy or branch before making changes. This is the stable base.   ║
-  ╚══════════════════════════════════════════════════════════════════╝
+  Farm Manager
 -->
 <html lang="en">
 <head>
@@ -964,10 +723,6 @@ function FarmWageManager() {
   });
   const [confirmDialog, setConfirmDialog] = useState({ show: false, message: '', onConfirm: null });
 
-  // App Info changelog accordion state
-  const [openVersions, setOpenVersions] = useState({ '4.0.0': true });
-  const toggleVersion = (v) => setOpenVersions(prev => ({ ...prev, [v]: !prev[v] }));
-
   // ── Sidebar collapse state ────────────────────────────────────────────────
   // Desktop/tablet: sidebar always visible in icon-only collapsed mode (sidebarOpen = false always)
   // Mobile: sidebarOpen controls the slide-in drawer
@@ -1087,8 +842,34 @@ function FarmWageManager() {
   const [googleAccessToken, setGoogleAccessToken] = useState('');
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
 
+  // ── Google Cloud Sync state ──────────────────────────────────────────────
+  const [gcpClientId, setGcpClientId] = useLocalStorage('gcpClientId', '');
+  const [gcpClientSecret, setGcpClientSecret] = useLocalStorage('gcpClientSecret', '');
+  const [gcpRefreshToken, setGcpRefreshToken] = useLocalStorage('gcpRefreshToken', '');
+  const [gcpSyncFileId, setGcpSyncFileId] = useLocalStorage('gcpSyncFileId', '');
+  const [lastSyncTime, setLastSyncTime] = useLocalStorage('lastSyncTime', '');
+  const [lastEditTime, setLastEditTime] = useLocalStorage('lastEditTime', ''); // tracks when local data was last changed
+  const [gcpAccessToken, setGcpAccessToken] = useState('');
+  const [gcpSyncStatus, setGcpSyncStatus] = useState('idle'); // 'idle'|'syncing'|'success'|'error'|'pending'
+  const [gcpSyncError, setGcpSyncError] = useState('');
+  const [gcpPullStatus, setGcpPullStatus] = useState('idle'); // 'idle'|'pulling'|'success'|'error'
+  const [gcpPullError, setGcpPullError] = useState('');
+  // Refs to always hold latest values inside debounced callbacks
+  const gcpSyncDataRef = React.useRef({});
+  const gcpCredsRef = React.useRef({});
+  const gcpFileIdRef = React.useRef('');
+  const gcpAccessTokenRef = React.useRef('');
+  const gcpSyncTimerRef = React.useRef(null);
+  // Offline-resilience: track connectivity and whether a sync is owed
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const hasPendingSyncRef = React.useRef(false);
+  // Refs for stable access inside event handlers — avoid stale closures
+  const lastEditTimeRef = React.useRef(lastEditTime);
+  const lastSyncTimeRef = React.useRef(lastSyncTime);
+  const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
+
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.0.0';
+  const APP_VERSION = '4.0.2';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1992,7 +1773,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.0.0'
+      version: '4.0.2'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2248,8 +2029,10 @@ function FarmWageManager() {
         seasonalWorks,
         expenses,
         contractWorks,
+        contacts,
+        generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.0.0'
+        version: '4.0.2'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2379,6 +2162,630 @@ function FarmWageManager() {
       setGoogleAccessToken(''); // Clear token to force re-auth
     }
   };
+
+  // ── Google Cloud Sync ─────────────────────────────────────────────────────
+
+  // Keep refs up-to-date so debounced callbacks always read latest values
+  React.useEffect(() => {
+    gcpCredsRef.current = { clientId: gcpClientId, clientSecret: gcpClientSecret, refreshToken: gcpRefreshToken };
+  }, [gcpClientId, gcpClientSecret, gcpRefreshToken]);
+
+  React.useEffect(() => {
+    gcpSyncDataRef.current = { workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes };
+    if (hasMountedDataRef.current) {
+      // This is a real user edit — record local edit timestamp in localStorage
+      // so the online-reconnect handler can compare it with lastSyncTime even after a page reload
+      const now = new Date().toISOString();
+      setLastEditTime(now);
+      lastEditTimeRef.current = now;
+    }
+    hasMountedDataRef.current = true;
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes]);
+
+  React.useEffect(() => { gcpFileIdRef.current = gcpSyncFileId; }, [gcpSyncFileId]);
+  React.useEffect(() => { gcpAccessTokenRef.current = gcpAccessToken; }, [gcpAccessToken]);
+  // Keep timestamp refs in sync so event handlers always read the latest persisted values
+  React.useEffect(() => { lastSyncTimeRef.current = lastSyncTime; }, [lastSyncTime]);
+  React.useEffect(() => { lastEditTimeRef.current = lastEditTime; }, [lastEditTime]);
+
+  // ── Online / offline detection — auto-sync pending changes on reconnect ──
+  React.useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      const creds = gcpCredsRef.current;
+      if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) return;
+
+      // TIMESTAMP COMPARISON: compare lastEditTime (when data last changed locally)
+      // vs lastSyncTime (when it was last successfully pushed to Drive).
+      // This persists across page reloads — so even if the app was closed while
+      // offline and reopened online, we detect the unsent edits correctly.
+      const editTime = lastEditTimeRef.current;
+      const syncTime = lastSyncTimeRef.current;
+      const hasUnsyncedEdits =
+        hasPendingSyncRef.current ||                        // volatile in-session flag
+        (editTime && (!syncTime || editTime > syncTime));   // durable timestamp check
+
+      if (hasUnsyncedEdits) {
+        hasPendingSyncRef.current = false;
+        // Short delay to let the connection stabilise before hitting Drive
+        setTimeout(() => gcpDoSync(), 1500);
+      }
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []); // eslint-disable-line
+
+  // ── On-mount stale-edit check ─────────────────────────────────────────────
+  // If the app was closed while offline (so hasPendingSyncRef was lost), the
+  // timestamp comparison catches it here when the app next loads online.
+  React.useEffect(() => {
+    if (!gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
+    if (!navigator.onLine) return;
+    const editTime = lastEditTime;
+    const syncTime = lastSyncTime;
+    if (editTime && (!syncTime || editTime > syncTime)) {
+      // Local data has edits that were never pushed — sync after app settles
+      setTimeout(() => gcpDoSync(), 2500);
+    }
+  }, []); // eslint-disable-line — intentionally runs once on mount
+
+  // Build redirect URI (current page URL without query/hash)
+  const gcpGetRedirectUri = () => window.location.origin + window.location.pathname;
+
+  // Refresh access token using stored refresh token
+  const gcpRefreshTokenFn = async (refreshToken) => {
+    const creds = gcpCredsRef.current;
+    const resp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken || creds.refreshToken,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+      }).toString()
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+    return data.access_token;
+  };
+
+  // Get a valid access token — refresh silently if in-memory token is gone
+  const gcpGetToken = async () => {
+    if (gcpAccessTokenRef.current) return gcpAccessTokenRef.current;
+    const creds = gcpCredsRef.current;
+    if (!creds.refreshToken) throw new Error('Not signed in. Please connect your Google account in Settings → Google Cloud Sync.');
+    const token = await gcpRefreshTokenFn(creds.refreshToken);
+    setGcpAccessToken(token);
+    gcpAccessTokenRef.current = token;
+    return token;
+  };
+
+  // Find or create the farm-manager-sync.json file; returns file ID
+  const gcpFindOrCreateFile = async (token, content) => {
+    const existingId = gcpFileIdRef.current;
+    // Verify stored ID still exists
+    if (existingId) {
+      const check = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${existingId}?fields=id`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (check.ok) return existingId;
+      setGcpSyncFileId('');
+      gcpFileIdRef.current = '';
+    }
+    // Search by name
+    const q = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
+    const searchResp = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const searchData = await searchResp.json();
+    if (searchData.error) throw new Error(searchData.error.message || `Drive search failed (HTTP ${searchResp.status})`);
+    if (searchData.files && searchData.files.length > 0) {
+      const id = searchData.files[0].id;
+      setGcpSyncFileId(id);
+      gcpFileIdRef.current = id;
+      return id;
+    }
+    // Create new file with initial content
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify({ name: 'farm-manager-sync.json', mimeType: 'application/json' })], { type: 'application/json' }));
+    form.append('file', new Blob([content], { type: 'application/json' }));
+    const createResp = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+    );
+    const created = await createResp.json();
+    if (created.error) throw new Error(created.error.message || 'Failed to create sync file');
+    setGcpSyncFileId(created.id);
+    gcpFileIdRef.current = created.id;
+    return created.id;
+  };
+
+  // Core sync operation — called from debounced trigger
+  const gcpDoSync = async (tokenOverride) => {
+    const creds = gcpCredsRef.current;
+    if (!creds.clientId || !creds.clientSecret) return;
+    if (!creds.refreshToken && !tokenOverride) return;
+
+    // Offline guard — remember the pending push; the online handler will retry
+    if (!navigator.onLine) {
+      hasPendingSyncRef.current = true;
+      setGcpSyncStatus('pending');
+      return;
+    }
+
+    setGcpSyncStatus('syncing');
+    setGcpSyncError('');
+
+    const buildPayload = () => JSON.stringify({
+      ...gcpSyncDataRef.current,
+      exportDate: new Date().toISOString(),
+      version: '4.0.2'
+    }, null, 2);
+
+    const doWithToken = async (token) => {
+      const payload = buildPayload();
+      const fileId = await gcpFindOrCreateFile(token, payload);
+
+      // ── Drive conflict check ──────────────────────────────────────────────
+      // Before overwriting, fetch the file's modifiedTime from Drive.
+      // If Drive is newer than our last successful sync it means another device
+      // has pushed changes — surface a conflict warning in the UI.
+      try {
+        const metaResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (metaResp.ok) {
+          const meta = await metaResp.json();
+          const driveModified = meta.modifiedTime; // ISO string
+          const syncTime = lastSyncTimeRef.current;
+          if (driveModified && syncTime && driveModified > syncTime) {
+            // Drive has data newer than our last sync — another device pushed
+            setGcpSyncError('⚠ Drive has newer data — consider pulling first to avoid overwriting remote edits.');
+            // We still proceed with push (local always wins in auto-sync), but the
+            // warning gives the user a chance to pull manually if they prefer.
+          }
+        }
+      } catch (_) { /* metadata fetch is best-effort; proceed regardless */ }
+
+      // Update file content
+      const upResp = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: payload }
+      );
+      if (!upResp.ok) {
+        const errBody = await upResp.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `HTTP ${upResp.status}`);
+      }
+    };
+
+    try {
+      const token = tokenOverride || await gcpGetToken();
+      await doWithToken(token);
+      const now = new Date().toISOString();
+      setLastSyncTime(now);
+      lastSyncTimeRef.current = now; // keep ref in sync for event handlers
+      setGcpSyncStatus('success');
+      setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
+    } catch (err) {
+      // Network failure (went offline mid-sync) — mark pending; online handler will retry
+      if (err instanceof TypeError && !navigator.onLine) {
+        hasPendingSyncRef.current = true;
+        setGcpSyncStatus('pending');
+        return;
+      }
+      // Try once more with a fresh token if it looks like an auth error
+      if (!tokenOverride && creds.refreshToken && (err.message.includes('401') || err.message.includes('Invalid Credentials') || err.message.includes('token'))) {
+        try {
+          const fresh = await gcpRefreshTokenFn(creds.refreshToken);
+          setGcpAccessToken(fresh);
+          gcpAccessTokenRef.current = fresh;
+          await doWithToken(fresh);
+          const now = new Date().toISOString();
+          setLastSyncTime(now);
+          lastSyncTimeRef.current = now;
+          setGcpSyncStatus('success');
+          setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
+          return;
+        } catch (e2) {
+          // If the retry itself fails because we went offline, mark pending
+          if (e2 instanceof TypeError && !navigator.onLine) {
+            hasPendingSyncRef.current = true;
+            setGcpSyncStatus('pending');
+            return;
+          }
+          setGcpSyncStatus('error');
+          setGcpSyncError(e2.message);
+          return;
+        }
+      }
+      setGcpSyncStatus('error');
+      setGcpSyncError(err.message);
+      console.error('GCP Sync error:', err);
+    }
+  };
+
+  // Debounced trigger — call this whenever data changes
+  const triggerGcpSync = React.useCallback((tokenOverride) => {
+    if (gcpSyncTimerRef.current) clearTimeout(gcpSyncTimerRef.current);
+    gcpSyncTimerRef.current = setTimeout(() => gcpDoSync(tokenOverride), 1800);
+  }, []); // eslint-disable-line
+
+  // Auto-sync whenever app data changes (if credentials are configured)
+  React.useEffect(() => {
+    if (gcpRefreshToken && gcpClientId && gcpClientSecret) {
+      triggerGcpSync();
+    }
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes]); // eslint-disable-line
+
+  // Handle OAuth popup callback — detect code in URL on load (runs in popup)
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (code && state === 'gcp_auth') {
+      // We are the popup — send code to opener and close
+      if (window.opener) {
+        window.opener.postMessage({ type: 'GCP_AUTH_CODE', code }, '*');
+        window.close();
+      } else {
+        // Fallback: store code in localStorage for main window to pick up
+        localStorage.setItem('_gcpAuthCode', code);
+        window.close();
+      }
+    }
+  }, []);
+
+  // Google Sign-In: open popup
+  const gcpSignIn = async () => {
+    const creds = gcpCredsRef.current;
+    if (!creds.clientId || !creds.clientSecret) {
+      alert('Please save your Client ID and Client Secret first.');
+      return;
+    }
+    const redirectUri = gcpGetRedirectUri();
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
+      client_id: creds.clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      access_type: 'offline',
+      prompt: 'consent',
+      state: 'gcp_auth'
+    }).toString();
+
+    const popup = window.open(authUrl, 'gcp_auth_popup', 'width=520,height=640,left=200,top=80');
+
+    // Shared ref so both the messageHandler and the poller can cancel each other
+    let pollIntervalRef = null;
+
+    // Listen for postMessage from popup
+    const messageHandler = async (event) => {
+      if (!event.data || event.data.type !== 'GCP_AUTH_CODE') return;
+      window.removeEventListener('message', messageHandler);
+      if (pollIntervalRef) { clearInterval(pollIntervalRef); pollIntervalRef = null; }
+      const code = event.data.code;
+      try {
+        // Exchange code for tokens
+        const resp = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            client_id: creds.clientId,
+            client_secret: creds.clientSecret,
+            redirect_uri: redirectUri
+          }).toString()
+        });
+        const tokens = await resp.json();
+        if (tokens.error) throw new Error(tokens.error_description || tokens.error);
+        if (tokens.refresh_token) {
+          setGcpRefreshToken(tokens.refresh_token);
+          gcpCredsRef.current.refreshToken = tokens.refresh_token;
+        }
+        setGcpAccessToken(tokens.access_token);
+        gcpAccessTokenRef.current = tokens.access_token;
+        // Kick off first sync immediately
+        setTimeout(() => gcpDoSync(tokens.access_token), 300);
+      } catch (err) {
+        alert('Google Sign-In failed: ' + err.message);
+      }
+    };
+    window.addEventListener('message', messageHandler);
+
+    // Also poll localStorage fallback (for browsers blocking postMessage across origins)
+    pollIntervalRef = setInterval(async () => {
+      const code = localStorage.getItem('_gcpAuthCode');
+      if (code) {
+        localStorage.removeItem('_gcpAuthCode');
+        clearInterval(pollIntervalRef); pollIntervalRef = null;
+        window.removeEventListener('message', messageHandler);
+        try {
+          const resp = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code,
+              client_id: creds.clientId,
+              client_secret: creds.clientSecret,
+              redirect_uri: redirectUri
+            }).toString()
+          });
+          const tokens = await resp.json();
+          if (tokens.error) throw new Error(tokens.error_description || tokens.error);
+          if (tokens.refresh_token) {
+            setGcpRefreshToken(tokens.refresh_token);
+            gcpCredsRef.current.refreshToken = tokens.refresh_token;
+          }
+          setGcpAccessToken(tokens.access_token);
+          gcpAccessTokenRef.current = tokens.access_token;
+          setTimeout(() => gcpDoSync(tokens.access_token), 300);
+        } catch (err) {
+          alert('Google Sign-In failed: ' + err.message);
+        }
+      }
+    }, 500);
+    // Stop polling after 5 minutes
+    setTimeout(() => { if (pollIntervalRef) { clearInterval(pollIntervalRef); pollIntervalRef = null; } }, 5 * 60 * 1000);
+  };
+
+  // Disconnect Google account
+  const gcpDisconnect = () => {
+    setGcpRefreshToken('');
+    setGcpAccessToken('');
+    gcpAccessTokenRef.current = '';
+    gcpCredsRef.current.refreshToken = '';
+    setGcpSyncStatus('idle');
+    setGcpSyncError('');
+    setLastSyncTime('');
+    setGcpSyncFileId('');
+    gcpFileIdRef.current = '';
+  };
+
+  // Manual sync trigger
+  const gcpManualSync = () => gcpDoSync();
+
+  // Pull from Drive — download farm-manager-sync.json and restore it
+  const gcpPullFromDrive = async () => {
+    const creds = gcpCredsRef.current;
+    if (!creds.clientId || !creds.clientSecret) {
+      alert('Please save your Client ID and Client Secret first.');
+      return;
+    }
+    if (!creds.refreshToken) {
+      alert('Please sign in with Google first.');
+      return;
+    }
+
+    setGcpPullStatus('pulling');
+    setGcpPullError('');
+
+    const doDownload = async (token) => {
+      // Locate the sync file (reuse find logic)
+      const existingId = gcpFileIdRef.current;
+      let fileId = existingId;
+
+      if (fileId) {
+        const check = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!check.ok) { fileId = null; }
+      }
+
+      if (!fileId) {
+        const q = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
+        const searchResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const searchData = await searchResp.json();
+        if (!searchData.files || searchData.files.length === 0) {
+          throw new Error('No farm-manager-sync.json file found in your Google Drive. Push data first to create it.');
+        }
+        fileId = searchData.files[0].id;
+        setGcpSyncFileId(fileId);
+        gcpFileIdRef.current = fileId;
+      }
+
+      // Download the file content
+      const dlResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!dlResp.ok) {
+        throw new Error(`Failed to download sync file (HTTP ${dlResp.status})`);
+      }
+      return dlResp.json();
+    };
+
+    try {
+      let token;
+      try {
+        token = await gcpGetToken();
+      } catch {
+        token = await gcpRefreshTokenFn(creds.refreshToken);
+        setGcpAccessToken(token);
+        gcpAccessTokenRef.current = token;
+      }
+
+      let raw;
+      try {
+        raw = await doDownload(token);
+      } catch (err) {
+        // Token might be stale — try a fresh one
+        if (err.message && (err.message.includes('401') || err.message.includes('403'))) {
+          const fresh = await gcpRefreshTokenFn(creds.refreshToken);
+          setGcpAccessToken(fresh);
+          gcpAccessTokenRef.current = fresh;
+          raw = await doDownload(fresh);
+        } else {
+          throw err;
+        }
+      }
+
+      // Validate
+      if (!raw || !Array.isArray(raw.workers)) {
+        throw new Error('The sync file on Drive does not appear to be a valid Farm Manager backup.');
+      }
+
+      // Migrate and show confirmation — identical flow to local restore
+      const migrated = migrateBackup(raw);
+      const backupVersion = raw.version || 'unknown';
+      const exportDate = raw.exportDate
+        ? new Date(raw.exportDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+        : 'unknown date';
+
+      const summary = [
+        `Source         : Google Drive (farm-manager-sync.json)`,
+        `Backup version : ${backupVersion}`,
+        `Last synced    : ${exportDate}`,
+        `Workers        : ${migrated.workers.length}`,
+        `Attendance     : ${migrated.attendance.length} records`,
+        `Payments       : ${migrated.payments.length} records`,
+        `Expenses       : ${migrated.expenses.length} records`,
+        `Seasonal Works : ${migrated.seasonalWorks.length} records`,
+        `Contract Works : ${migrated.contractWorks.length} records`,
+        `Special Notes  : ${migrated.specialNotes.length} records`,
+        `General Notes  : ${migrated.generalNotes.length} records`,
+        `Contacts       : ${migrated.contacts.length} records`,
+      ].join('\n');
+
+      setGcpPullStatus('idle'); // Clear pulling spinner before dialog
+
+      setConfirmDialog({
+        show: true,
+        message: `Pull & Restore from Google Drive?\n\n${summary}\n\nThis will REPLACE all current data and cannot be undone.`,
+        onConfirm: () => {
+          setWorkers(migrated.workers);
+          setAttendance(migrated.attendance);
+          setPayments(migrated.payments);
+          setSpecialNotes(migrated.specialNotes);
+          setSeasonalWorks(migrated.seasonalWorks);
+          setExpenses(migrated.expenses);
+          setContractWorks(migrated.contractWorks);
+          setContacts(migrated.contacts);
+          setGeneralNotes(migrated.generalNotes);
+          setConfirmDialog({ show: false, message: '', onConfirm: null });
+          setGcpPullStatus('success');
+          setTimeout(() => setGcpPullStatus(s => s === 'success' ? 'idle' : s), 3000);
+          // Update last sync time to match what we pulled; also reset lastEditTime
+          // so the timestamp comparison doesn't trigger a redundant re-push
+          if (raw.exportDate) {
+            setLastSyncTime(raw.exportDate);
+            lastSyncTimeRef.current = raw.exportDate;
+            setLastEditTime(raw.exportDate);
+            lastEditTimeRef.current = raw.exportDate;
+          }
+          alert(`✅ Restored successfully from Google Drive (v${backupVersion}).\n\nAll ${migrated.workers.length} workers and associated data have been loaded.`);
+        },
+        onCancel: () => {
+          setGcpPullStatus('idle');
+          setConfirmDialog({ show: false, message: '', onConfirm: null });
+        }
+      });
+
+    } catch (err) {
+      setGcpPullStatus('error');
+      setGcpPullError(err.message);
+      console.error('GCP Pull error:', err);
+    }
+  };
+
+  // Format last sync time for display
+  const formatSyncTime = (isoStr) => {
+    if (!isoStr) return 'Never';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch { return isoStr; }
+  };
+
+  // ── Storage Monitor ──────────────────────────────────────────────────────
+  const [storageStats, setStorageStats] = useState(null);
+
+  const computeStorageStats = React.useCallback(() => {
+    const kb = (key) => {
+      try {
+        const v = localStorage.getItem(key);
+        return v ? new Blob([v]).size : 0;
+      } catch { return 0; }
+    };
+
+    // All other (unknown) keys used by the app or browser extensions
+    const knownKeys = new Set([
+      'farmWorkers','farmAttendance','farmPayments','farmSpecialNotes',
+      'farmSeasonalWorks','farmExpenses','farmContractWorks','farmPhonebook',
+      'farmGeneralNotes','farmTheme','googleClientId','googleApiKey',
+      'gcpClientId','gcpClientSecret','gcpRefreshToken','gcpSyncFileId','lastSyncTime','lastEditTime'
+    ]);
+    let otherBytes = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!knownKeys.has(k)) {
+          const v = localStorage.getItem(k);
+          otherBytes += v ? new Blob([v]).size : 0;
+        }
+      }
+    } catch {}
+
+    const groups = [
+      {
+        label: 'App Data',
+        color: '#4285f4',
+        items: [
+          { key: 'farmWorkers',      label: 'Workers',       icon: '👷', bytes: kb('farmWorkers') },
+          { key: 'farmAttendance',   label: 'Attendance',    icon: '📅', bytes: kb('farmAttendance') },
+          { key: 'farmPayments',     label: 'Payments',      icon: '💰', bytes: kb('farmPayments') },
+          { key: 'farmSpecialNotes', label: 'Worker Notes',  icon: '📝', bytes: kb('farmSpecialNotes') },
+          { key: 'farmSeasonalWorks',label: 'Seasonal Works',icon: '🌱', bytes: kb('farmSeasonalWorks') },
+          { key: 'farmExpenses',     label: 'Expenses',      icon: '🧾', bytes: kb('farmExpenses') },
+          { key: 'farmContractWorks',label: 'Project Works', icon: '🔨', bytes: kb('farmContractWorks') },
+          { key: 'farmPhonebook',    label: 'Phonebook',     icon: '📞', bytes: kb('farmPhonebook') },
+          { key: 'farmGeneralNotes', label: 'General Notes', icon: '💬', bytes: kb('farmGeneralNotes') },
+        ]
+      },
+      {
+        label: 'Settings & Config',
+        color: '#8b5cf6',
+        items: [
+          { key: 'farmTheme',      label: 'Theme',             icon: '🎨', bytes: kb('farmTheme') },
+          { key: '_googleDrive',   label: 'Google Drive Config', icon: '🔑', bytes: kb('googleClientId') + kb('googleApiKey') },
+          { key: '_gcpSync',       label: 'Cloud Sync Config', icon: '☁️',  bytes: kb('gcpClientId') + kb('gcpClientSecret') + kb('gcpRefreshToken') + kb('gcpSyncFileId') + kb('lastSyncTime') },
+        ]
+      },
+    ];
+
+    if (otherBytes > 0) {
+      groups.push({
+        label: 'Other',
+        color: '#94a3b8',
+        items: [{ key: '_other', label: 'Other / Browser', icon: '🔧', bytes: otherBytes }]
+      });
+    }
+
+    const LIMIT = 5 * 1024 * 1024; // 5 MB in bytes
+    const totalBytes = groups.reduce((s, g) => s + g.items.reduce((a, i) => a + i.bytes, 0), 0);
+
+    return { groups, totalBytes, LIMIT, timestamp: Date.now() };
+  }, []);
+
+  // Recompute whenever any stored data changes
+  React.useEffect(() => {
+    setStorageStats(computeStorageStats());
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes, currentTheme, gcpRefreshToken, lastSyncTime]);
 
   // Clear all data
   const clearAllData = () => {
@@ -8561,6 +8968,231 @@ function FarmWageManager() {
             </div>
           </div>
 
+          {/* Google Cloud Sync */}
+          <div style={{
+            background: 'var(--card)',
+            borderRadius: '16px',
+            padding: '20px',
+            marginBottom: '16px',
+            border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(66,133,244,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4285f4" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{width:'18px',height:'18px'}}>
+                  <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>Google Cloud Sync</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '500' }}>Auto-sync all data to Google Drive in background</div>
+              </div>
+              {/* Sync status badge */}
+              {gcpRefreshToken && (
+                <div style={{
+                  padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                  background: gcpSyncStatus === 'syncing' ? '#fef3c7' : gcpSyncStatus === 'error' ? '#fee2e2' : gcpSyncStatus === 'success' ? '#dcfce7' : gcpSyncStatus === 'pending' ? '#fef9c3' : '#f1f5f9',
+                  color: gcpSyncStatus === 'syncing' ? '#92400e' : gcpSyncStatus === 'error' ? '#991b1b' : gcpSyncStatus === 'success' ? '#166534' : gcpSyncStatus === 'pending' ? '#854d0e' : 'var(--text-3)',
+                  display: 'flex', alignItems: 'center', gap: '5px'
+                }}>
+                  {gcpSyncStatus === 'syncing' && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1s infinite' }} />}
+                  {gcpSyncStatus === 'pending' && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#ca8a04' }} />}
+                  {gcpSyncStatus === 'error' && '⚠'}
+                  {gcpSyncStatus === 'success' && '✓'}
+                  {gcpSyncStatus === 'idle' && '○'}
+                  {gcpSyncStatus === 'syncing' ? 'Syncing…' : gcpSyncStatus === 'error' ? 'Sync Error' : gcpSyncStatus === 'success' ? 'Synced' : gcpSyncStatus === 'pending' ? 'Offline' : 'Ready'}
+                </div>
+              )}
+            </div>
+
+            {/* OAuth Credentials */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-2)', marginBottom: '6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                OAuth 2.0 Client ID
+              </label>
+              <input
+                type="text"
+                value={gcpClientId}
+                onChange={e => setGcpClientId(e.target.value)}
+                placeholder="xxxxxxxx.apps.googleusercontent.com"
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: '13px', fontFamily: 'DM Mono, monospace', outline: 'none' }}
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-2)', marginBottom: '6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                OAuth 2.0 Client Secret
+              </label>
+              <input
+                type="password"
+                value={gcpClientSecret}
+                onChange={e => setGcpClientSecret(e.target.value)}
+                placeholder="GOCSPX-…"
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: '13px', fontFamily: 'DM Mono, monospace', outline: 'none' }}
+              />
+            </div>
+
+            {/* Setup hint */}
+            <div style={{ padding: '10px 12px', background: 'rgba(66,133,244,0.07)', borderRadius: '10px', fontSize: '12px', color: 'var(--text-2)', lineHeight: '1.6', marginBottom: '16px', border: '1px solid rgba(66,133,244,0.15)' }}>
+              <strong style={{color:'#4285f4'}}>Setup:</strong> In Google Cloud Console → APIs &amp; Services → Credentials, create an OAuth 2.0 Client ID of type <strong>Web Application</strong>. Add <code style={{background:'rgba(0,0,0,0.06)',padding:'1px 5px',borderRadius:'4px',fontSize:'11px'}}>{typeof window !== 'undefined' ? (window.location.origin + window.location.pathname) : 'this page URL'}</code> as an Authorised Redirect URI. Enable the <strong>Google Drive API</strong> in your project.
+            </div>
+
+            {/* ── Push / Pull — always visible ── */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Manual Sync
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+
+                {/* Push to Drive */}
+                <button
+                  onClick={gcpRefreshToken && isOnline ? gcpManualSync : undefined}
+                  disabled={!gcpRefreshToken || gcpSyncStatus === 'syncing' || !isOnline}
+                  title={!gcpRefreshToken ? 'Sign in with Google first' : !isOnline ? 'Offline — push will happen automatically on reconnect' : 'Push current data to Google Drive'}
+                  style={{
+                    padding: '14px 10px', borderRadius: '12px',
+                    border: `2px solid ${gcpRefreshToken ? '#4285f4' : 'var(--border)'}`,
+                    background: !gcpRefreshToken ? 'var(--surface)' : (gcpSyncStatus === 'syncing' || !isOnline) ? 'rgba(66,133,244,0.05)' : 'rgba(66,133,244,0.09)',
+                    color: gcpRefreshToken ? '#4285f4' : 'var(--text-3)',
+                    fontSize: '13px', fontWeight: '700',
+                    cursor: gcpRefreshToken && gcpSyncStatus !== 'syncing' && isOnline ? 'pointer' : 'not-allowed',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                    opacity: !gcpRefreshToken || gcpSyncStatus === 'syncing' || !isOnline ? 0.55 : 1,
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{width:'20px',height:'20px'}}>
+                    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                  </svg>
+                  <span style={{fontSize:'12px', lineHeight:'1.2', textAlign:'center'}}>
+                    {gcpSyncStatus === 'syncing' ? 'Pushing…' : !isOnline ? 'Offline' : 'Push to Drive'}
+                  </span>
+                </button>
+
+                {/* Pull from Drive */}
+                <button
+                  onClick={gcpRefreshToken && isOnline ? gcpPullFromDrive : undefined}
+                  disabled={!gcpRefreshToken || gcpPullStatus === 'pulling' || !isOnline}
+                  title={!gcpRefreshToken ? 'Sign in with Google first' : !isOnline ? 'Offline — cannot pull from Drive without a connection' : 'Pull & restore data from Google Drive'}
+                  style={{
+                    padding: '14px 10px', borderRadius: '12px',
+                    border: `2px solid ${gcpRefreshToken ? '#0f9d58' : 'var(--border)'}`,
+                    background: !gcpRefreshToken ? 'var(--surface)' : (gcpPullStatus === 'pulling' || !isOnline) ? 'rgba(15,157,88,0.05)' : 'rgba(15,157,88,0.09)',
+                    color: gcpRefreshToken ? '#0f9d58' : 'var(--text-3)',
+                    fontSize: '13px', fontWeight: '700',
+                    cursor: gcpRefreshToken && gcpPullStatus !== 'pulling' && isOnline ? 'pointer' : 'not-allowed',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                    opacity: !gcpRefreshToken || gcpPullStatus === 'pulling' || !isOnline ? 0.55 : 1,
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{width:'20px',height:'20px'}}>
+                    <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/>
+                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                  </svg>
+                  <span style={{fontSize:'12px', lineHeight:'1.2', textAlign:'center'}}>
+                    {gcpPullStatus === 'pulling' ? 'Pulling…' : !isOnline ? 'Offline' : 'Pull from Drive'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Error feedback */}
+              {(gcpSyncStatus === 'error' || gcpPullStatus === 'error') && (
+                <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fee2e2', borderRadius: '8px', fontSize: '12px', color: '#991b1b', lineHeight: '1.5' }}>
+                  ⚠ {gcpSyncStatus === 'error' ? gcpSyncError : gcpPullError}
+                </div>
+              )}
+            </div>
+
+            {/* ── Sign-in / Disconnect ── */}
+            {!gcpRefreshToken ? (
+              <button
+                onClick={gcpSignIn}
+                disabled={!gcpClientId || !gcpClientSecret}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: '12px', border: 'none',
+                  cursor: gcpClientId && gcpClientSecret ? 'pointer' : 'not-allowed',
+                  background: gcpClientId && gcpClientSecret ? 'linear-gradient(135deg,#4285f4,#1a73e8)' : 'var(--border)',
+                  color: gcpClientId && gcpClientSecret ? 'white' : 'var(--text-3)',
+                  fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  boxShadow: gcpClientId && gcpClientSecret ? '0 3px 10px rgba(66,133,244,0.35)' : 'none',
+                  marginBottom: '12px'
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{width:'16px',height:'16px'}}>
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+                </svg>
+                Sign in with Google to Enable Sync
+              </button>
+            ) : (
+              <button
+                onClick={gcpDisconnect}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: '10px',
+                  border: '1.5px solid var(--border)',
+                  background: 'var(--card)', color: 'var(--text-3)',
+                  fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+                  marginBottom: '12px'
+                }}
+              >
+                Disconnect Google Account
+              </button>
+            )}
+
+            {/* Status row */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 12px', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+              {/* Connection status */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: gcpSyncStatus === 'syncing' || gcpPullStatus === 'pulling' ? '#f59e0b'
+                      : gcpSyncStatus === 'error' || gcpPullStatus === 'error' ? '#ef4444'
+                      : gcpSyncStatus === 'pending' ? '#ca8a04'
+                      : gcpRefreshToken ? '#22c55e' : '#94a3b8',
+                    animation: gcpSyncStatus === 'pending' ? 'pulse 2s infinite' : 'none'
+                  }} />
+                  <span style={{ fontSize: '12px', color: 'var(--text-3)', fontWeight: '500' }}>
+                    {gcpSyncStatus === 'syncing' ? 'Pushing to Drive…'
+                      : gcpPullStatus === 'pulling' ? 'Pulling from Drive…'
+                      : gcpPullStatus === 'error' ? 'Pull failed'
+                      : gcpSyncStatus === 'error' ? 'Push failed'
+                      : gcpSyncStatus === 'pending' ? 'Offline — will sync on reconnect'
+                      : gcpRefreshToken ? 'Connected' : 'Not connected'}
+                  </span>
+                </div>
+              </div>
+              {/* Timestamp comparison row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ padding: '6px 10px', background: 'var(--card)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', fontWeight: '600', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Edit (local)</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: lastEditTime && (!lastSyncTime || lastEditTime > lastSyncTime) ? '#d97706' : 'var(--text-1)', lineHeight: '1.3' }}>
+                    {formatSyncTime(lastEditTime)}
+                  </div>
+                  {lastEditTime && (!lastSyncTime || lastEditTime > lastSyncTime) && (
+                    <div style={{ fontSize: '9px', color: '#d97706', marginTop: '2px', fontWeight: '600' }}>⚠ Unsynced</div>
+                  )}
+                </div>
+                <div style={{ padding: '6px 10px', background: 'var(--card)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', fontWeight: '600', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Push (Drive)</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-1)', lineHeight: '1.3' }}>
+                    {formatSyncTime(lastSyncTime)}
+                  </div>
+                  {lastSyncTime && lastEditTime && lastSyncTime >= lastEditTime && (
+                    <div style={{ fontSize: '9px', color: '#16a34a', marginTop: '2px', fontWeight: '600' }}>✓ Up to date</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Sync file note */}
+            {gcpRefreshToken && (
+              <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-3)', lineHeight: '1.5', textAlign: 'center' }}>
+                Syncing to <strong>farm-manager-sync.json</strong> in your Google Drive. This file is compatible with the Backup &amp; Restore feature.
+              </div>
+            )}
+          </div>
+
           {/* Data Management */}
           <div style={{
             background: 'var(--card)',
@@ -8719,6 +9351,145 @@ function FarmWageManager() {
             </div>
           </div>
 
+          {/* Storage Monitor */}
+          {(() => {
+            const stats = storageStats || computeStorageStats();
+            const { groups, totalBytes, LIMIT } = stats;
+            const totalPct = Math.min((totalBytes / LIMIT) * 100, 100);
+            const fmtSize = (b) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/(1024*1024)).toFixed(2)} MB`;
+            const barColor = totalPct > 85 ? '#ef4444' : totalPct > 60 ? '#f59e0b' : '#22c55e';
+            const allItems = groups.flatMap(g => g.items.map(i => ({ ...i, groupColor: g.color })));
+            const maxItemBytes = Math.max(...allItems.map(i => i.bytes), 1);
+
+            return (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '20px', marginTop: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{width:'18px',height:'18px'}}>
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>Storage Monitor</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '500' }}>Local storage · 5 MB browser limit</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setStorageStats(computeStorageStats())}
+                    title="Refresh"
+                    style={{ width:'32px', height:'32px', borderRadius:'8px', border:'1px solid var(--border)', background:'var(--surface)', color:'var(--text-3)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink: 0 }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:'14px',height:'14px'}}>
+                      <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* ── Total Usage Bar ── */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-1)' }}>Total Used</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                      <span style={{ fontSize: '20px', fontWeight: '800', color: barColor, letterSpacing: '-0.5px' }}>{fmtSize(totalBytes)}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-3)', fontWeight: '500' }}>of 5 MB</span>
+                    </div>
+                  </div>
+
+                  {/* Segmented total bar */}
+                  <div style={{ position: 'relative', height: '14px', borderRadius: '99px', background: 'var(--surface)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                    {/* Coloured segments per group */}
+                    {(() => {
+                      let offset = 0;
+                      return groups.map((g, gi) => {
+                        const gBytes = g.items.reduce((s, i) => s + i.bytes, 0);
+                        const gPct = (gBytes / LIMIT) * 100;
+                        const left = offset;
+                        offset += gPct;
+                        return gBytes > 0 ? (
+                          <div key={gi} style={{ position: 'absolute', left: `${left}%`, top: 0, width: `${gPct}%`, height: '100%', background: g.color, transition: 'width 0.4s ease' }} />
+                        ) : null;
+                      });
+                    })()}
+                    {/* Warning stripe overlay at 85% */}
+                    {totalPct > 85 && (
+                      <div style={{ position: 'absolute', right: 0, top: 0, width: `${100 - 85}%`, height: '100%', background: 'repeating-linear-gradient(45deg, rgba(239,68,68,0.25) 0px, rgba(239,68,68,0.25) 3px, transparent 3px, transparent 8px)' }} />
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: barColor }}>{totalPct.toFixed(1)}% used</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-3)', fontWeight: '500' }}>{fmtSize(LIMIT - totalBytes)} free</span>
+                  </div>
+
+                  {/* Threshold warning */}
+                  {totalPct > 85 && (
+                    <div style={{ marginTop: '10px', padding: '9px 12px', background: totalPct > 95 ? '#fee2e2' : '#fef3c7', borderRadius: '8px', fontSize: '12px', color: totalPct > 95 ? '#991b1b' : '#92400e', lineHeight: '1.5', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                      <span style={{flexShrink:0}}>{totalPct > 95 ? '🔴' : '⚠️'}</span>
+                      <span><strong>{totalPct > 95 ? 'Critical:' : 'Warning:'}</strong> Storage is {totalPct > 95 ? 'nearly full' : 'running low'}. Download a backup and consider clearing old data to free up space.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Legend chips ── */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '18px' }}>
+                  {groups.map((g, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 9px', borderRadius: '20px', background: `${g.color}15`, border: `1px solid ${g.color}30` }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: '11px', fontWeight: '600', color: g.color }}>{g.label}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-3)', fontWeight: '500' }}>
+                        {fmtSize(g.items.reduce((s, i) => s + i.bytes, 0))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Per-feature rows ── */}
+                {groups.map((g, gi) => (
+                  <div key={gi} style={{ marginBottom: gi < groups.length - 1 ? '16px' : 0 }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '10px', height: '3px', borderRadius: '2px', background: g.color }} />
+                      {g.label}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {g.items.map((item, ii) => {
+                        const itemPct = totalBytes > 0 ? (item.bytes / totalBytes) * 100 : 0;
+                        const barPct = (item.bytes / maxItemBytes) * 100;
+                        return (
+                          <div key={ii} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', alignItems: 'center', gap: '8px' }}>
+                            {/* Icon */}
+                            <span style={{ fontSize: '14px', textAlign: 'center' }}>{item.icon}</span>
+                            {/* Label + bar */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-1)' }}>{item.label}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-3)', fontWeight: '500' }}>{itemPct.toFixed(1)}%</span>
+                              </div>
+                              <div style={{ height: '5px', borderRadius: '99px', background: 'var(--surface)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                <div style={{ height: '100%', width: `${barPct}%`, borderRadius: '99px', background: item.bytes === 0 ? 'var(--border)' : g.color, transition: 'width 0.4s ease', opacity: item.bytes === 0 ? 0.4 : 1 }} />
+                              </div>
+                            </div>
+                            {/* Size */}
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: item.bytes === 0 ? 'var(--text-3)' : 'var(--text-1)', minWidth: '46px', textAlign: 'right' }}>
+                              {fmtSize(item.bytes)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* ── Footer note ── */}
+                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border)', fontSize: '11px', color: 'var(--text-3)', lineHeight: '1.6', textAlign: 'center' }}>
+                  Sizes are approximate (UTF-8 encoded). Auto-refreshes when data changes.
+                </div>
+              </div>
+            );
+          })()}
+
           {/* App Info */}
           <div style={{
             background: 'var(--card)',
@@ -8733,7 +9504,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 3.0.0
+              Version 4.0.2
             </p>
           </div>
         </div>
@@ -8743,352 +9514,8 @@ function FarmWageManager() {
       {activeView === 'appinfo' && (
         <div className="fm-page">
         {(() => {
-        // Changelog data — single source of truth
-        const CHANGELOG = [
-          {
-            version: '4.0.0',
-            date: '2026-04-04',
-            latest: true,
-            stable: true,
-            entries: [
-              { type: 'fix', text: 'Expand All (⊞) now correctly expands ALL months in Seasonal Work, Expenses, and Project Works — broken sentinel logic ("open:" key) replaced with simple has(key) check; empty set = all expanded.' },
-              { type: 'fix', text: 'Seasonal Work, Expenses, Project Works — all month groups now load expanded by default instead of only the newest month.' },
-              { type: 'fix', text: 'General Notes — all notes now load expanded by default; state convention flipped from expandedSet (presence=open) to collapsedSet (presence=closed) so empty initial state = all notes expanded.' },
-              { type: 'fix', text: 'General Notes Expand All / Collapse All buttons were wired in reverse — now correctly fixed.' },
-              { type: 'fix', text: 'New notes added to General Notes auto-expand (not in collapsed set by default).' },
-            ]
-          },
-          {
-            version: '3.0.1',
-            date: '2026-03-14',
-            latest: false,
-            stable: true,
-            entries: [
-              { type: 'add', text: 'General Notes: all notes load collapsed by default. Click any note header to expand or collapse its body.' },
-              { type: 'add', text: 'General Notes: chevron icon rotates on each header to indicate expanded/collapsed state.' },
-              { type: 'add', text: 'General Notes: collapsed cards show a one-line body preview so notes are identifiable without expanding.' },
-              { type: 'add', text: 'General Notes: Expand All (⊞) and Collapse All (⊟) bulk-toggle buttons in the page header.' },
-              { type: 'add', text: 'General Notes: note count shown next to the heading.' },
-              { type: 'change', text: 'General Notes: Edit/Delete buttons use stopPropagation so they work independently of the collapse toggle.' },
-            ]
-          },
-          {
-            version: '3.0.0',
-            date: '2026-03-14',
-            latest: false,
-            stable: true,
-            entries: [
-              { type: 'change', text: 'Performance release — seven runtime optimisations with zero app-logic or UI changes.' },
-              { type: 'change', text: 'Balance cache (useRef Map): getClosingBalance now O(1) on repeated calls per render cycle; cache auto-invalidated when workers/attendance/payments change. Eliminates recursive array scanning on every render.' },
-              { type: 'change', text: 'getStats() wrapped in useMemo — recalculates only when workers or attendance data changes, not on every sidebar toggle or modal open.' },
-              { type: 'change', text: 'localStorage writes debounced 400 ms — typing no longer triggers synchronous JSON.stringify+setItem on every keystroke, eliminating main-thread input lag.' },
-              { type: 'change', text: 'React.memo applied to NavButton, ActionButton, StatCard, AttendanceCell and PrevMonthsPanel — these sub-components skip re-renders when their props have not changed.' },
-              { type: 'change', text: 'CSS utility classes added (fm-page, fm-card, fm-empty, fm-list, fm-btn-primary, fm-section-hdr, fm-month-nav) replacing the most-repeated inline style objects — static styles no longer create new object references every render.' },
-              { type: 'change', text: 'Key event handlers wrapped in useCallback: handleNavClick, markAttendance, toggleWorkerStatus, deleteWorker, addPayment, deletePayment, navigateCalendar, navigateReportMonth. Stable references prevent spurious child re-renders.' },
-              { type: 'change', text: 'console.clear interval raised from 2 s to 60 s — same source-protection deterrent, 30× less recurring main-thread noise.' },
-              { type: 'change', text: 'todayDisplay date string computed once on component mount instead of recalculating on every render pass.' },
-            ]
-          },
-          {
-            version: '2.9.5',
-            date: '2026-03-08',
-            latest: false,
-            stable: true,
-            entries: [
-              { type: 'add',    text: 'Collapsed tablet sidebar now shows a text label below each nav icon — navigation items are no longer anonymous symbols requiring guesswork.' },
-              { type: 'add',    text: 'Nav icons enlarged from 18 px to 24×24 px in collapsed tablet mode for better tap targets and visual clarity.' },
-              { type: 'change', text: 'Collapsed sidebar width increased from 60 px to 76 px to accommodate the icon + label stacked layout without clipping.' },
-              { type: 'add',    text: 'Tapping the farm logo / home icon on tablet toggles the sidebar between collapsed (icon+label) and full expanded drawer. A ‹ chevron appears as a visual collapse hint. Tapping the backdrop or selecting any nav item auto-collapses the sidebar.' },
-            ]
-          },
-          {
-            version: '2.9.4',
-            date: '2026-03-08',
-            stable: true,
-            entries: [
-              { type: 'fix', text: 'App was blurring itself on tablets and phones. The DevTools window-size detector compared outerHeight vs innerHeight — browser chrome alone (status bar + address bar + navigation bar) consumes 200 px+ on Android, exceeding the 160 px threshold and blurring the app on every load. Detector removed entirely; all other source-protection layers remain active.' },
-              { type: 'fix', text: 'Browser address bar colour was showing stale/incorrect colour from the old cached file. Meta theme-color initial value corrected to #0f172a (dark navy) and confirmed to update dynamically on every theme change.' },
-            ]
-          },
-          {
-            version: '2.9.3',
-            date: '2026-03-08',
-            stable: true,
-            entries: [
-              { type: 'fix', text: 'Browser address bar / PWA chrome colour was hardcoded to #0077b6 via <meta name="theme-color">. Tag is now updated dynamically inside the theme useEffect — the address bar colour changes in sync with every theme switch, using the sidebar background tone of each theme.' },
-            ]
-          },
-          {
-            version: '2.9.2',
-            date: '2026-03-08',
-            stable: true,
-            entries: [
-              { type: 'fix', text: 'Mobile breakpoint lowered from 768 px to 600 px. iPad mini (768 px portrait) was incorrectly treated as a mobile device, hiding the sidebar entirely. All tablets (≥ 601 px) now correctly show the collapsed icon-only sidebar; only phones (≤ 600 px) use the slide-in drawer.' },
-            ]
-          },
-          {
-            version: '2.9.1',
-            date: '2026-03-08',
-            stable: true,
-            entries: [
-              { type: 'add',    text: 'Backward-compatible restore: all 9 data collections pass through per-entity migration functions before being written to state — every field added across app versions is back-filled with a safe default.' },
-              { type: 'add',    text: 'migratePayment: type field defaulted to "payment" for old records — critical, as payment/credit distinction drives all wage balance calculations.' },
-              { type: 'add',    text: 'migrateWorker: phone, openingBalance, type ("regular"), active (true) and createdAt defaulted if absent.' },
-              { type: 'add',    text: 'migrateContractWork: totalItemCost, totalLaborCost and items array (added in v2.8) defaulted; all numeric fields coerced from string if needed.' },
-              { type: 'add',    text: 'migrateSeasonalWork: assignedWorkers array defaulted. migrateContact: whatsapp, location, rate defaulted. migrateGeneralNote: updatedAt defaulted.' },
-              { type: 'add',    text: 'migrateBackup: top-level function handles entirely absent collection keys (e.g. contacts missing in v1.x backups) gracefully by defaulting to empty arrays.' },
-              { type: 'add',    text: 'Restore confirmation dialog now shows backup version, export date and record counts before overwriting, so the user can verify the right file was selected.' },
-              { type: 'fix',    text: 'Restore validity check relaxed: only the workers array is required. Previously, attendance was also required — causing valid day-0 backups with zero attendance records to be rejected.' },
-              { type: 'fix',    text: 'Google Drive restore path updated with the same migration layer and matching confirmation dialog improvements.' },
-            ]
-          },
-          {
-            version: '2.9.0',
-            date: '2026-03-08',
-            entries: [
-              { type: 'add',    text: 'Source Protection: right-click context menu disabled app-wide to prevent "Inspect" / "View Page Source" shortcuts.' },
-              { type: 'add',    text: 'Source Protection: F12, Ctrl+Shift+I/J/C (DevTools), Ctrl+U (View Source), Ctrl+S (Save Page), Ctrl+P (Print) keyboard shortcuts suppressed.' },
-              { type: 'add',    text: 'Source Protection: Ctrl+A blocked at page level but passes through when focus is on any input, textarea or select — all app forms work unaffected.' },
-              { type: 'add',    text: 'Source Protection: CSS user-select:none globally; re-enabled for editable elements. DevTools docked-mode detection blurs app body when panel is open.' },
-              { type: 'add',    text: 'UX: Sidebar always collapsed (icon-only, 60 px) on desktop/tablet. Sidebar colour derived from active theme via CSS variables.' },
-            ]
-          },
-          {
-            version: '2.8.0',
-            date: '2026-03-08',
-            stable: true,
-            entries: [
-              { type: 'fix',    text: 'Future-month navigation: "Next" button in Attendance and Reports now uses year-first comparison. Previous &&-logic incorrectly enabled the button when navigating into a year whose month number was smaller than the current month.' },
-              { type: 'fix',    text: 'Payment type (Payment / Credit) is now editable — the type toggle is shown during edit and the updated type is saved. Previously the type was permanently fixed at creation.' },
-              { type: 'fix',    text: 'Deleting a worker now also deletes their Special Notes. Previously notes were orphaned in localStorage causing invisible ghost data to accumulate.' },
-              { type: 'fix',    text: 'Attendance isFuture check now parses YYYY-MM-DD as local midnight instead of UTC, fixing a 5:30 AM IST off-by-one that blocked today\'s attendance marking in early morning.' },
-              { type: 'fix',    text: 'Attendance & Payment collapsed worker headers now use CSS variables (--surface / --card) instead of hardcoded light hex colours, fixing jarring white bands on all dark themes.' },
-              { type: 'add',    text: 'Worker Notes: Edit button added to each note card — full edit / update flow with pre-filled modal, matching all other modules.' },
-              { type: 'add',    text: 'Project Works: item costs are now auto-summed into the Total Item Cost field as you type. Field is labelled "auto-calculated".' },
-              { type: 'fix',    text: 'Dashboard Monthly Wages stat now excludes inactive workers from the attendance scan.' },
-            ]
-          },
-          {
-            version: '2.7.0',
-            date: '2026-03-08',
-            entries: [
-              { type: 'fix',    text: 'React error #310 — useState was called inside an IIFE embedded in JSX return on the App Info page, violating React\'s rules of hooks. Fixed by moving openVersions state and toggleVersion handler to component top level.' },
-              { type: 'fix',    text: 'App Info: IIFE return now wrapped in a React fragment (<>...</>) so multiple sibling elements are returned with a valid single root.' },
-              { type: 'change', text: 'openVersions default key updated to current version on each release so the latest entry auto-expands on first visit.' },
-            ]
-          },
-          {
-            version: '2.6.0',
-            date: '2026-03-08',
-            entries: [
-              { type: 'fix',    text: 'Theme switcher now correctly rewrites all CSS custom properties via a useEffect on currentTheme — previously clicking a theme only updated the picker widget, not the app colours.' },
-              { type: 'remove', text: 'Removed Online Backup (Google Drive) section from Settings for a cleaner interface.' },
-              { type: 'add',    text: 'App Info: full version history & changelog accordion (this page) added.' },
-            ]
-          },
-          {
-            version: '2.5.0',
-            date: '2026-03-08',
-            entries: [
-              { type: 'add', text: 'Auto Update Notification: detects new GitHub Pages deploys via 3 independent channels — SW updatefound event, custom swUpdateReady event from inline script, and version-string poll against live page (every 30 min).' },
-              { type: 'add', text: 'Toast banner with animated slide-up + pulse glow effect; "Update Now" triggers SKIP_WAITING → controllerchange → auto-reload; "Later" dismisses for the session.' },
-              { type: 'add', text: 'SW registration script now exposes window.__swReg and fires swUpdateReady custom event on state change.' },
-            ]
-          },
-          {
-            version: '2.4.0',
-            date: '2026-03-02',
-            stable: true,
-            entries: [
-              { type: 'fix', text: 'Attendance calendar popups (Special Note, Opening Balance, Attendance menu) now use position:fixed + getBoundingClientRect() for smart viewport-aware placement — flips above cell when near bottom edge, clamps horizontally so right-edge/left-edge cells never clip outside the screen boundary.' },
-              { type: 'fix', text: 'All three popup types escape overflow:hidden parent containers via fixed positioning; shared Popup helper eliminates duplicated backdrop logic.' },
-            ]
-          },
-          {
-            version: '2.3.0',
-            date: '2026-03-01',
-            entries: [
-              { type: 'add', text: 'Attendance: collapse/expand calendar per worker by tapping worker name; chevron indicator; compact attendance summary pills when collapsed; ⊞/⊟ expand/collapse all.' },
-              { type: 'add', text: 'Payments: collapse/expand full payment card per worker; summary pills show earnings, paid, credit, past txns when collapsed; ⊞/⊟ expand/collapse all.' },
-              { type: 'add', text: 'Seasonal Work: month-grouped accordion within year filter; newest month auto-expanded; ⊞/⊟ all; per-month total.' },
-              { type: 'add', text: 'Expenses: month-grouped accordion within year filter; per-month item count and total; ⊞/⊟ all.' },
-              { type: 'add', text: 'Project Works: month-grouped accordion within year filter; per-month project count and contract cost; ⊞/⊟ all.' },
-              { type: 'add', text: 'Year navigation resets month collapse state on all pages.' },
-            ]
-          },
-          {
-            version: '2.2.0',
-            date: '2026-03-01',
-            entries: [
-              { type: 'add', text: 'App Info tab: copyright & IP notice, owner attribution accessible via sidebar nav and dashboard quick actions.' },
-            ]
-          },
-          {
-            version: '2.1.0',
-            date: '2026-03-01',
-            entries: [
-              { type: 'add', text: 'PWA: viewport-fit=cover for notch/punch-hole support.' },
-              { type: 'add', text: 'PWA: 100dvh dynamic viewport height — Chrome toolbar fix.' },
-              { type: 'add', text: 'PWA: env(safe-area-inset-*) on body, header, sidebar, loading screen and all sticky-bottom modal footers.' },
-              { type: 'add', text: 'Worker Notes: month-wise grouping with chevron navigation, quick-jump pills, smart empty states, UTC date fix.' },
-              { type: 'add', text: 'Payments: collapsible Previous Month Transactions panel per worker, two-level month accordion, auto-expands most recent month, full edit/delete on past records.' },
-            ]
-          },
-          {
-            version: '2.0.0',
-            date: '2026-02-01',
-            entries: [
-              { type: 'add', text: 'Initial multi-module farm management app launched.' },
-              { type: 'add', text: 'Modules: Workers, Attendance, Payments, Worker Notes, Seasonal Work, Expenses, Project Works, Phonebook, Reports, General Notes, Settings, Themes.' },
-              { type: 'add', text: 'localStorage persistence, Backup/Restore, 6 themes (3 light, 3 dark), PWA support.' },
-            ]
-          },
-        ];
-
-        const typeStyle = {
-          add:    { bg: '#dcfce7', color: '#15803d', label: '+ ADD' },
-          fix:    { bg: '#dbeafe', color: '#1d4ed8', label: '✱ FIX' },
-          remove: { bg: '#fee2e2', color: '#b91c1c', label: '− REM' },
-          change: { bg: '#fef9c3', color: '#92400e', label: '~ CHG' },
-        };
-
         return (
           <>
-            <div style={{
-              background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 100%)`,
-              borderRadius: '20px',
-              padding: '32px 24px',
-              textAlign: 'center',
-              marginBottom: '20px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
-            }}>
-              <div style={{width:'52px',height:'52px',margin:'0 auto 12px',color:'white'}}>{Icons.farm}</div>
-              <h1 style={{ margin:'0 0 4px 0', fontSize:'26px', fontWeight:'800', color:'white', letterSpacing:'-0.5px' }}>
-                Farm Manager
-              </h1>
-              <p style={{ margin:'0 0 14px 0', fontSize:'13px', color:'rgba(255,255,255,0.8)' }}>
-                One Stop Solution for Farming Expense Management
-              </p>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', flexWrap:'wrap' }}>
-                <div style={{ background:'rgba(255,255,255,0.22)', borderRadius:'20px', padding:'5px 16px', fontSize:'13px', fontWeight:'700', color:'white' }}>
-                  Version 4.0.0
-                </div>
-                <div style={{ background:'rgba(255,255,255,0.14)', borderRadius:'20px', padding:'5px 14px', fontSize:'12px', fontWeight:'600', color:'rgba(255,255,255,0.9)' }}>
-                  4 Apr 2026
-                </div>
-              </div>
-            </div>
-
-            {/* ── Copyright card ──────────────────────────────────────── */}
-            <div style={{ background:'var(--card)', borderRadius:'20px', overflow:'hidden', boxShadow:'0 2px 16px rgba(0,0,0,0.09)', marginBottom:'20px' }}>
-              <div style={{ background:'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', padding:'18px 24px', display:'flex', alignItems:'center', gap:'12px' }}>
-                <span style={{ fontSize:'22px' }}>©</span>
-                <div>
-                  <div style={{ fontSize:'16px', fontWeight:'800', color:'white' }}>App Info &amp; Copyright</div>
-                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.6)', marginTop:'2px' }}>Intellectual Property Notice</div>
-                </div>
-              </div>
-              <div style={{ padding:'24px' }}>
-                <div style={{ fontSize:'16px', fontWeight:'800', color:'var(--text-1)', marginBottom:'14px', paddingBottom:'14px', borderBottom:'1px solid var(--border)' }}>
-                  © 2026 Vivek Hegde Hulimane. All rights reserved.
-                </div>
-                <p style={{ margin:'0 0 14px 0', fontSize:'14px', color:'var(--text-2)', lineHeight:'1.75' }}>
-                  <strong style={{color:'var(--text-1)'}}>Farm Manager</strong> and all associated content — including design, layout, source code, databases, features and functionality — are the exclusive intellectual property of <strong style={{color:'var(--text-1)'}}>Vivek Hegde Hulimane</strong> and are protected under applicable copyright, trademark and intellectual property laws.
-                </p>
-                <p style={{ margin:'0 0 16px 0', fontSize:'14px', color:'var(--text-2)', lineHeight:'1.75' }}>
-                  No part of this application may be reproduced, distributed, modified, transmitted, displayed, published, reverse engineered, or otherwise exploited in any form without prior written permission from <strong style={{color:'var(--text-1)'}}>Vivek Hegde Hulimane</strong>.
-                </p>
-                <div style={{ background:'#fff3cd', border:'1px solid #ffc107', borderLeft:'4px solid #e67e22', borderRadius:'10px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
-                  <div style={{width:'18px',height:'18px',color:'#e67e22',flexShrink:0,marginTop:'1px'}}>{Icons.alert}</div>
-                  <p style={{ margin:0, fontSize:'13px', color:'#7d4a00', lineHeight:'1.6', fontWeight:'600' }}>
-                    Unauthorized use may result in civil and/or criminal penalties under applicable laws.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Version History & Changelog ─────────────────────────── */}
-            <div style={{ background:'var(--card)', borderRadius:'20px', overflow:'hidden', boxShadow:'0 2px 16px rgba(0,0,0,0.08)', marginBottom:'20px' }}>
-              {/* Section header */}
-              <div style={{ padding:'18px 24px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:'12px' }}>
-                <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:`${theme.primary}18`, display:'flex', alignItems:'center', justifyContent:'center', color:theme.primary }}>
-                  {Icons.reports}
-                </div>
-                <div>
-                  <div style={{ fontSize:'16px', fontWeight:'700', color:'var(--text-1)' }}>Version History</div>
-                  <div style={{ fontSize:'12px', color:'var(--text-2)', marginTop:'2px' }}>{CHANGELOG.length} releases</div>
-                </div>
-              </div>
-
-              {/* Accordion entries */}
-              <div style={{ padding:'16px' }}>
-                {CHANGELOG.map((rel, idx) => {
-                  const isOpen = !!openVersions[rel.version];
-                  return (
-                    <div key={rel.version} style={{ marginBottom: idx < CHANGELOG.length - 1 ? '8px' : 0 }}>
-                      {/* Version row header */}
-                      <button
-                        onClick={() => toggleVersion(rel.version)}
-                        style={{
-                          width:'100%', display:'flex', alignItems:'center', gap:'10px',
-                          padding:'12px 14px', borderRadius:'12px', border:'none', cursor:'pointer',
-                          background: isOpen ? `${theme.primary}10` : 'var(--surface)',
-                          textAlign:'left', transition:'background 0.15s'
-                        }}
-                      >
-                        {/* Version badge */}
-                        <div style={{
-                          minWidth:'68px', padding:'4px 10px', borderRadius:'8px', textAlign:'center',
-                          background: rel.latest ? theme.primary : rel.stable ? '#059669' : 'var(--border)',
-                          color: rel.latest || rel.stable ? 'white' : 'var(--text-2)',
-                          fontSize:'12px', fontWeight:'800', fontFamily:"'DM Mono', monospace", letterSpacing:'0.03em'
-                        }}>
-                          v{rel.version}
-                        </div>
-                        {/* Date */}
-                        <span style={{ fontSize:'13px', color:'var(--text-2)', fontWeight:'500', flex:1 }}>{rel.date}</span>
-                        {/* Tags */}
-                        {rel.latest && (
-                          <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'20px', background:`${theme.primary}20`, color:theme.primary }}>LATEST</span>
-                        )}
-                        {rel.stable && (
-                          <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'20px', background:'#dcfce7', color:'#15803d' }}>STABLE</span>
-                        )}
-                        {/* Chevron */}
-                        <div style={{ width:'16px', height:'16px', color:'var(--text-2)', transform: isOpen ? 'rotate(90deg)' : 'none', transition:'transform 0.18s' }}>
-                          {Icons.chevronRight}
-                        </div>
-                      </button>
-
-                      {/* Entry list */}
-                      {isOpen && (
-                        <div style={{ padding:'8px 14px 4px 14px', display:'flex', flexDirection:'column', gap:'7px' }}>
-                          {rel.entries.map((e, i) => {
-                            const s = typeStyle[e.type] || typeStyle.add;
-                            return (
-                              <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
-                                <span style={{
-                                  flexShrink:0, fontSize:'9px', fontWeight:'800', padding:'3px 6px',
-                                  borderRadius:'5px', background:s.bg, color:s.color,
-                                  fontFamily:"'DM Mono', monospace", letterSpacing:'0.05em',
-                                  marginTop:'2px', whiteSpace:'nowrap'
-                                }}>
-                                  {s.label}
-                                </span>
-                                <span style={{ fontSize:'13px', color:'var(--text-2)', lineHeight:'1.6' }}>
-                                  {e.text}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* ── Stack / Tech ────────────────────────────────────────── */}
             <div style={{ background:'var(--card)', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', marginBottom:'20px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-2)', marginBottom:'14px' }}>Tech Stack</div>
@@ -9330,7 +9757,10 @@ function FarmWageManager() {
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
-                onClick={() => setConfirmDialog({ show: false, message: '', onConfirm: null })}
+                onClick={() => {
+                  if (typeof confirmDialog.onCancel === 'function') confirmDialog.onCancel();
+                  else setConfirmDialog({ show: false, message: '', onConfirm: null });
+                }}
                 style={{
                   flex: 1,
                   padding: '14px',
