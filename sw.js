@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v4.0.5';
+const CACHE_VERSION = 'v4.0.6';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
@@ -238,7 +238,10 @@ function openBgSyncDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(BG_SYNC_DB_NAME, BG_SYNC_DB_VER);
     req.onupgradeneeded = e => {
-      e.target.result.createObjectStore(BG_SYNC_DB_STORE);
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(BG_SYNC_DB_STORE)) {
+        db.createObjectStore(BG_SYNC_DB_STORE);
+      }
     };
     req.onsuccess  = e  => resolve(e.target.result);
     req.onerror    = () => reject(req.error);

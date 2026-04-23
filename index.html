@@ -870,7 +870,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.0.5';
+  const APP_VERSION = '4.0.6';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1798,7 +1798,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.0.5'
+      version: '4.0.6'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1982,23 +1982,31 @@ function FarmWageManager() {
 
   // Google Drive Picker Integration
   
-  // Load Google API scripts
+  // Load Google API scripts — guarded so credential changes don't inject duplicate tags
   React.useEffect(() => {
     if (googleClientId && googleApiKey) {
-      // Load Google API script
-      const script1 = document.createElement('script');
-      script1.src = 'https://apis.google.com/js/api.js';
-      script1.onload = () => {
+      // Only inject if not already present in the DOM
+      if (!document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
+        const script1 = document.createElement('script');
+        script1.src = 'https://apis.google.com/js/api.js';
+        script1.onload = () => {
+          window.gapi.load('picker', () => {
+            setGooglePickerInited(true);
+          });
+        };
+        document.body.appendChild(script1);
+      } else if (window.gapi && window.gapi.load && !googlePickerInited) {
+        // Script already loaded (e.g. credentials updated) — re-init the picker module
         window.gapi.load('picker', () => {
           setGooglePickerInited(true);
         });
-      };
-      document.body.appendChild(script1);
+      }
 
-      // Load Google Identity Services
-      const script2 = document.createElement('script');
-      script2.src = 'https://accounts.google.com/gsi/client';
-      document.body.appendChild(script2);
+      if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+        const script2 = document.createElement('script');
+        script2.src = 'https://accounts.google.com/gsi/client';
+        document.body.appendChild(script2);
+      }
     }
   }, [googleClientId, googleApiKey]);
 
@@ -2057,7 +2065,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.0.5'
+        version: '4.0.6'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2125,16 +2133,20 @@ function FarmWageManager() {
         .setDeveloperKey(googleApiKey)
         .setCallback(async (data) => {
           if (data.action === window.google.picker.Action.PICKED) {
-            const fileId = data.docs[0].id;
-            
-            // Download file from Google Drive
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
+            try {
+              const fileId = data.docs[0].id;
 
-            if (response.ok) {
+              // Download file from Google Drive
+              const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+
+              if (!response.ok) {
+                throw new Error(`Failed to download file (HTTP ${response.status}). The file may not be accessible with the current account.`);
+              }
+
               const raw = await response.json();
 
               if (!Array.isArray(raw.workers)) {
@@ -2173,8 +2185,10 @@ function FarmWageManager() {
                   alert(`✅ Restored successfully from v${backupVersion} backup (Google Drive).\n\nAll missing fields from older backups have been filled with safe defaults.`);
                 }
               });
-            } else {
-              throw new Error('Failed to download file');
+            } catch (pickerErr) {
+              console.error('Google Drive picker restore error:', pickerErr);
+              alert('Failed to restore from Google Drive: ' + pickerErr.message);
+              setGoogleAccessToken(''); // Clear token to force re-auth on next attempt
             }
           }
         })
@@ -2295,7 +2309,12 @@ function FarmWageManager() {
 
   const openBgSyncDB = () => new Promise((resolve, reject) => {
     const req = indexedDB.open(BG_SYNC_DB_NAME, BG_SYNC_DB_VER);
-    req.onupgradeneeded = e => e.target.result.createObjectStore(BG_SYNC_DB_STORE);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(BG_SYNC_DB_STORE)) {
+        db.createObjectStore(BG_SYNC_DB_STORE);
+      }
+    };
     req.onsuccess  = e  => resolve(e.target.result);
     req.onerror    = () => reject(req.error);
   });
@@ -2325,7 +2344,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '4.0.5',
+        version:  '4.0.6',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2449,7 +2468,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '4.0.5'
+      version: '4.0.6'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -2594,6 +2613,12 @@ function FarmWageManager() {
 
     const popup = window.open(authUrl, 'gcp_auth_popup', 'width=520,height=640,left=200,top=80');
 
+    // Guard: popup blocked by the browser
+    if (!popup || popup.closed) {
+      alert('The sign-in popup was blocked by your browser.\n\nPlease allow popups for this site and try again.');
+      return;
+    }
+
     // Shared ref so both the messageHandler and the poller can cancel each other
     let pollIntervalRef = null;
 
@@ -2665,8 +2690,12 @@ function FarmWageManager() {
         }
       }
     }, 500);
-    // Stop polling after 5 minutes
-    setTimeout(() => { if (pollIntervalRef) { clearInterval(pollIntervalRef); pollIntervalRef = null; } }, 5 * 60 * 1000);
+    // Stop polling after 5 minutes — also remove the message listener to prevent a permanent leak
+    // if the user closed the popup without completing auth.
+    setTimeout(() => {
+      if (pollIntervalRef) { clearInterval(pollIntervalRef); pollIntervalRef = null; }
+      window.removeEventListener('message', messageHandler);
+    }, 5 * 60 * 1000);
   };
 
   // Disconnect Google account
@@ -9634,7 +9663,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 4.0.5
+              Version 4.0.6
             </p>
           </div>
         </div>
