@@ -863,13 +863,14 @@ function FarmWageManager() {
   // Offline-resilience: track connectivity and whether a sync is owed
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const hasPendingSyncRef = React.useRef(false);
+  const gcpSyncLockRef = React.useRef(false);  // BUG-06 fix: prevent concurrent syncs
   // Refs for stable access inside event handlers — avoid stale closures
   const lastEditTimeRef = React.useRef(lastEditTime);
   const lastSyncTimeRef = React.useRef(lastSyncTime);
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.0.2';
+  const APP_VERSION = '4.0.5';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -944,9 +945,33 @@ function FarmWageManager() {
     const onSwUpdateReady = () => setUpdateAvailable(true);
     window.addEventListener('swUpdateReady', onSwUpdateReady);
 
+    // ── 6. Listen for background sync completion messages from the SW ──────
+    // The SW sends BG_SYNC_COMPLETE when it successfully uploads while the
+    // tab is open (but the app was idle / offline when the sync was queued).
+    const onSwMessage = (event) => {
+      if (!event.data) return;
+      if (event.data.type === 'BG_SYNC_COMPLETE') {
+        const { syncTime, fileId } = event.data;
+        setLastSyncTime(syncTime);
+        lastSyncTimeRef.current = syncTime;
+        if (fileId) {
+          setGcpSyncFileId(fileId);
+          gcpFileIdRef.current = fileId;
+        }
+        setGcpSyncStatus('success');
+        setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 4000);
+        console.log('[App] Background sync completed (SW reported):', syncTime);
+      } else if (event.data.type === 'BG_SYNC_ERROR') {
+        console.warn('[App] Background sync error (SW reported):', event.data.error);
+        // Don't surface an error toast here — the SW will retry automatically
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onSwMessage);
+
     return () => {
       clearTimeout(versionTimer);
       window.removeEventListener('swUpdateReady', onSwUpdateReady);
+      navigator.serviceWorker.removeEventListener('message', onSwMessage);
     };
   }, []);
 
@@ -1773,7 +1798,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.0.2'
+      version: '4.0.5'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2032,7 +2057,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.0.2'
+        version: '4.0.5'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2224,16 +2249,103 @@ function FarmWageManager() {
   // ── On-mount stale-edit check ─────────────────────────────────────────────
   // If the app was closed while offline (so hasPendingSyncRef was lost), the
   // timestamp comparison catches it here when the app next loads online.
+  // We also read 'lastBgSyncTime' from IndexedDB: the SW writes this key when
+  // it completes a background sync while the tab is closed, so we can update
+  // our local lastSyncTime without the app ever having been open during the sync.
   React.useEffect(() => {
-    if (!gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
-    if (!navigator.onLine) return;
-    const editTime = lastEditTime;
-    const syncTime = lastSyncTime;
-    if (editTime && (!syncTime || editTime > syncTime)) {
-      // Local data has edits that were never pushed — sync after app settles
-      setTimeout(() => gcpDoSync(), 2500);
-    }
+    // Step 1 — Apply any background sync that completed while the app was closed
+    openBgSyncDB()
+      .then(db => Promise.all([
+        bgIdbGet(db, 'lastBgSyncTime'),
+        bgIdbGet(db, 'lastBgSyncFileId'),
+      ]))
+      .then(([bgSyncTime, bgFileId]) => {
+        if (bgSyncTime && (!lastSyncTime || bgSyncTime > lastSyncTime)) {
+          setLastSyncTime(bgSyncTime);
+          lastSyncTimeRef.current = bgSyncTime;
+          console.log('[App] Applied background sync timestamp from IDB:', bgSyncTime);
+        }
+        if (bgFileId && !gcpSyncFileId) {
+          setGcpSyncFileId(bgFileId);
+          gcpFileIdRef.current = bgFileId;
+        }
+      })
+      // BUG-04 fix: run stale-edit check AFTER IDB read completes so lastSyncTime is fresh
+      .then(() => {
+        if (!gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
+        if (!navigator.onLine) return;
+        const editTime = lastEditTime;
+        const syncTime = lastSyncTimeRef.current;  // use ref for freshest value
+        if (editTime && (!syncTime || editTime > syncTime)) {
+          setTimeout(() => gcpDoSync(), 2500);
+        }
+      })
+      .catch(() => {}); // IDB unavailable — non-fatal
   }, []); // eslint-disable-line — intentionally runs once on mount
+
+
+  // ── IndexedDB helpers for background-sync ─────────────────────────────────
+  // Both this page and the service worker share the same IndexedDB database.
+  // The page queues the payload here when going offline; the SW reads it when
+  // connectivity returns — even if every browser tab is closed.
+
+  const BG_SYNC_DB_NAME  = 'farm-manager-bg-sync';
+  const BG_SYNC_DB_VER   = 1;
+  const BG_SYNC_DB_STORE = 'pending-syncs';
+
+  const openBgSyncDB = () => new Promise((resolve, reject) => {
+    const req = indexedDB.open(BG_SYNC_DB_NAME, BG_SYNC_DB_VER);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(BG_SYNC_DB_STORE);
+    req.onsuccess  = e  => resolve(e.target.result);
+    req.onerror    = () => reject(req.error);
+  });
+  const bgIdbPut = (db, key, val) => new Promise((res, rej) => {
+    const r = db.transaction(BG_SYNC_DB_STORE, 'readwrite').objectStore(BG_SYNC_DB_STORE).put(val, key);
+    r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+  });
+  const bgIdbGet = (db, key) => new Promise((res, rej) => {
+    const r = db.transaction(BG_SYNC_DB_STORE, 'readonly').objectStore(BG_SYNC_DB_STORE).get(key);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const bgIdbDel = (db, key) => new Promise((res, rej) => {
+    const r = db.transaction(BG_SYNC_DB_STORE, 'readwrite').objectStore(BG_SYNC_DB_STORE).delete(key);
+    r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+  });
+
+  /**
+   * Write the current sync payload into IndexedDB and register the
+   * 'gcp-data-sync' Background Sync tag so the SW will upload it even
+   * after the tab is closed.  Gracefully no-ops if the Background Sync
+   * API is not supported (older browsers / Safari).
+   */
+  const storePendingSyncData = async () => {
+    try {
+      const db = await openBgSyncDB();
+      await bgIdbPut(db, 'syncPayload', {
+        creds:    { ...gcpCredsRef.current },
+        fileId:   gcpFileIdRef.current,
+        data:     { ...gcpSyncDataRef.current },
+        version:  '4.0.5',
+        queuedAt: new Date().toISOString(),
+      });
+      // Register with the Background Sync API if the browser supports it
+      if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.sync.register('gcp-data-sync');
+        console.log('[App] Background sync tag "gcp-data-sync" registered.');
+      }
+    } catch (e) {
+      console.warn('[App] storePendingSyncData failed (non-fatal):', e.message);
+    }
+  };
+
+  /** Remove the IDB payload after a successful foreground sync. */
+  const clearPendingSyncData = async () => {
+    try {
+      const db = await openBgSyncDB();
+      await bgIdbDel(db, 'syncPayload');
+    } catch (_) {}
+  };
 
   // Build redirect URI (current page URL without query/hash)
   const gcpGetRedirectUri = () => window.location.origin + window.location.pathname;
@@ -2311,6 +2423,14 @@ function FarmWageManager() {
 
   // Core sync operation — called from debounced trigger
   const gcpDoSync = async (tokenOverride) => {
+    // BUG-06 fix: concurrent sync guard — skip if another sync is already in flight
+    if (gcpSyncLockRef.current) {
+      console.log('[App] gcpDoSync skipped — another sync is already in flight.');
+      return;
+    }
+    gcpSyncLockRef.current = true;
+
+    try {
     const creds = gcpCredsRef.current;
     if (!creds.clientId || !creds.clientSecret) return;
     if (!creds.refreshToken && !tokenOverride) return;
@@ -2319,6 +2439,7 @@ function FarmWageManager() {
     if (!navigator.onLine) {
       hasPendingSyncRef.current = true;
       setGcpSyncStatus('pending');
+      storePendingSyncData();   // ← BUG-01 fix: queue payload for background sync
       return;
     }
 
@@ -2328,7 +2449,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '4.0.2'
+      version: '4.0.5'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -2375,12 +2496,14 @@ function FarmWageManager() {
       setLastSyncTime(now);
       lastSyncTimeRef.current = now; // keep ref in sync for event handlers
       setGcpSyncStatus('success');
+      clearPendingSyncData();   // ← BUG-02 fix: remove IDB payload after normal success
       setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
     } catch (err) {
       // Network failure (went offline mid-sync) — mark pending; online handler will retry
       if (err instanceof TypeError && !navigator.onLine) {
         hasPendingSyncRef.current = true;
         setGcpSyncStatus('pending');
+        storePendingSyncData();   // ← BUG-03 fix: queue payload for background sync
         return;
       }
       // Try once more with a fresh token if it looks like an auth error
@@ -2394,13 +2517,16 @@ function FarmWageManager() {
           setLastSyncTime(now);
           lastSyncTimeRef.current = now;
           setGcpSyncStatus('success');
+          clearPendingSyncData();   // ← sync succeeded — remove IDB payload
           setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
           return;
         } catch (e2) {
-          // If the retry itself fails because we went offline, mark pending
+          // If the retry itself fails because we went offline, mark pending.
+          // Register a background sync so the SW handles it if the tab closes.
           if (e2 instanceof TypeError && !navigator.onLine) {
             hasPendingSyncRef.current = true;
             setGcpSyncStatus('pending');
+            storePendingSyncData();   // ← queue for background sync
             return;
           }
           setGcpSyncStatus('error');
@@ -2411,6 +2537,9 @@ function FarmWageManager() {
       setGcpSyncStatus('error');
       setGcpSyncError(err.message);
       console.error('GCP Sync error:', err);
+    }
+    } finally {
+      gcpSyncLockRef.current = false;  // BUG-06 fix: always release the lock
     }
   };
 
@@ -2551,6 +2680,7 @@ function FarmWageManager() {
     setLastSyncTime('');
     setGcpSyncFileId('');
     gcpFileIdRef.current = '';
+    clearPendingSyncData();   // ← BUG-05 fix: prevent SW from syncing with stale credentials
   };
 
   // Manual sync trigger
@@ -9504,7 +9634,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 4.0.2
+              Version 4.0.5
             </p>
           </div>
         </div>

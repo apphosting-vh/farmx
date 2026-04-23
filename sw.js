@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v4.0.3';
+const CACHE_VERSION = 'v4.0.5';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
@@ -221,6 +221,225 @@ self.addEventListener('message', event => {
       break;
   }
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INDEXED DB HELPERS — shared key-value store for background sync payloads
+//  The page writes the sync payload here before going offline; the SW reads
+//  it when the 'sync' event fires (even with the app fully closed).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BG_SYNC_DB_NAME  = 'farm-manager-bg-sync';
+const BG_SYNC_DB_VER   = 1;
+const BG_SYNC_DB_STORE = 'pending-syncs';
+
+/** Open (or create) the background-sync IndexedDB. */
+function openBgSyncDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(BG_SYNC_DB_NAME, BG_SYNC_DB_VER);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(BG_SYNC_DB_STORE);
+    };
+    req.onsuccess  = e  => resolve(e.target.result);
+    req.onerror    = () => reject(req.error);
+  });
+}
+
+function idbGet(db, key) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(BG_SYNC_DB_STORE, 'readonly');
+    const req = tx.objectStore(BG_SYNC_DB_STORE).get(key);
+    req.onsuccess  = () => resolve(req.result);
+    req.onerror    = () => reject(req.error);
+  });
+}
+
+function idbPut(db, key, value) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(BG_SYNC_DB_STORE, 'readwrite');
+    const req = tx.objectStore(BG_SYNC_DB_STORE).put(value, key);
+    req.onsuccess  = () => resolve();
+    req.onerror    = () => reject(req.error);
+  });
+}
+
+function idbDelete(db, key) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(BG_SYNC_DB_STORE, 'readwrite');
+    const req = tx.objectStore(BG_SYNC_DB_STORE).delete(key);
+    req.onsuccess  = () => resolve();
+    req.onerror    = () => reject(req.error);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BACKGROUND SYNC — fires when connectivity is restored, even with no tab open
+// ─────────────────────────────────────────────────────────────────────────────
+
+self.addEventListener('sync', event => {
+  if (event.tag === 'gcp-data-sync') {
+    console.log('[SW] Background sync event fired — attempting Drive upload');
+    event.waitUntil(performBackgroundSync());
+  }
+});
+
+/**
+ * Core background sync routine.
+ * Reads the queued payload from IndexedDB, refreshes the OAuth token,
+ * uploads the data to Google Drive, then clears the queue.
+ *
+ * If the upload fails the browser will automatically retry the sync tag
+ * (with exponential back-off) until it succeeds or the retry limit expires.
+ */
+async function performBackgroundSync() {
+  let db;
+  try {
+    db = await openBgSyncDB();
+
+    // ── 1. Read the pending payload ────────────────────────────────────────
+    const pending = await idbGet(db, 'syncPayload');
+    if (!pending) {
+      console.log('[SW] No pending sync payload found — nothing to do.');
+      return;
+    }
+
+    const { creds, fileId, data, version } = pending;
+
+    // Bail if credentials are incomplete — nothing we can do
+    if (!creds || !creds.refreshToken || !creds.clientId || !creds.clientSecret) {
+      console.warn('[SW] Background sync: missing OAuth credentials — skipping.');
+      return;
+    }
+
+    // ── 2. Obtain a fresh access token via refresh token ──────────────────
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        refresh_token: creds.refreshToken,
+        client_id:     creds.clientId,
+        client_secret: creds.clientSecret,
+      }).toString(),
+    });
+    const tokenData = await tokenResp.json();
+    if (tokenData.error) {
+      throw new Error(tokenData.error_description || tokenData.error);
+    }
+    const token = tokenData.access_token;
+    console.log('[SW] Background sync: access token obtained.');
+
+    // ── 3. Resolve the Drive file ID ───────────────────────────────────────
+    let syncFileId = fileId || '';
+
+    // Verify the stored ID still resolves
+    if (syncFileId) {
+      const check = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${syncFileId}?fields=id`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!check.ok) {
+        console.log('[SW] Background sync: stored fileId is stale, will search Drive.');
+        syncFileId = '';
+      }
+    }
+
+    // Search Drive for the well-known file name
+    if (!syncFileId) {
+      const q           = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
+      const searchResp  = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const searchData  = await searchResp.json();
+      if (searchData.error) {
+        throw new Error(searchData.error.message || `Drive search failed (HTTP ${searchResp.status})`);
+      }
+      if (searchData.files && searchData.files.length > 0) {
+        syncFileId = searchData.files[0].id;
+        console.log('[SW] Background sync: found existing Drive file:', syncFileId);
+      }
+    }
+
+    // ── 4. Build the JSON payload ─────────────────────────────────────────
+    const payload = JSON.stringify({
+      ...data,
+      exportDate: new Date().toISOString(),
+      version:    version || CACHE_VERSION,
+    }, null, 2);
+
+    // ── 5. Upload — PATCH existing file, or create new one ────────────────
+    let upResp;
+    if (syncFileId) {
+      // Update existing file content
+      upResp = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${syncFileId}?uploadType=media`,
+        {
+          method:  'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body:    payload,
+        }
+      );
+    } else {
+      // Create the sync file for the first time
+      const form = new FormData();
+      form.append('metadata', new Blob(
+        [JSON.stringify({ name: 'farm-manager-sync.json', mimeType: 'application/json' })],
+        { type: 'application/json' }
+      ));
+      form.append('file', new Blob([payload], { type: 'application/json' }));
+      upResp = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+      );
+      if (upResp.ok) {
+        const created = await upResp.clone().json();
+        if (created.id) {
+          syncFileId = created.id;
+          // Store the new file ID so the page can pick it up on next open
+          await idbPut(db, 'lastBgSyncFileId', syncFileId);
+        }
+      }
+    }
+
+    if (!upResp.ok) {
+      const errBody = await upResp.json().catch(() => ({}));
+      throw new Error(errBody.error?.message || `HTTP ${upResp.status}`);
+    }
+
+    // ── 6. Persist metadata & clear the pending payload ───────────────────
+    const syncTime = new Date().toISOString();
+    await idbPut(db, 'lastBgSyncTime',   syncTime);
+    await idbPut(db, 'lastBgSyncFileId', syncFileId);
+    await idbDelete(db, 'syncPayload');           // payload consumed — remove it
+
+    console.log('[SW] Background sync succeeded at', syncTime);
+
+    // ── 7. Notify any open clients so they can update their UI ────────────
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach(client => {
+      client.postMessage({
+        type:     'BG_SYNC_COMPLETE',
+        syncTime: syncTime,
+        fileId:   syncFileId,
+      });
+    });
+
+  } catch (err) {
+    console.error('[SW] Background sync FAILED:', err.message);
+
+    // Notify any open clients about the failure
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clients.forEach(client => {
+        client.postMessage({ type: 'BG_SYNC_ERROR', error: err.message });
+      });
+    } catch (_) {}
+
+    // Re-throwing causes the browser to schedule a retry (Back-off: ~5 min, ~10 min, …)
+    throw err;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  FETCH — Intercept all network requests and apply caching strategies
