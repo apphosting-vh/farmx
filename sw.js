@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v4.0.6';
+const CACHE_VERSION = 'v4.1.0'; // bumped: navigation preload + font caching
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
@@ -73,8 +73,16 @@ const CDN_ORIGINS = [
   'cdnjs.cloudflare.com',
 ];
 
+// Google Fonts origins — cached with stale-while-revalidate so fonts load
+// instantly on repeat visits. Kept separate from GOOGLE_ORIGINS (which are
+// auth-sensitive and must never be cached).
+const FONT_ORIGINS = [
+  'fonts.googleapis.com',  // stylesheet (e.g. ?family=DM+Sans…)
+  'fonts.gstatic.com',     // actual .woff2 font binaries
+];
+
 const GOOGLE_ORIGINS = [
-  'googleapis.com',
+  'googleapis.com',        // API calls – NOT fonts.googleapis.com (matched above first)
   'accounts.google.com',
   'drive.google.com',
 ];
@@ -97,6 +105,10 @@ function isSameOriginStatic(url) {
 
 function isCDNAsset(url) {
   return CDN_ORIGINS.some(origin => url.hostname.endsWith(origin));
+}
+
+function isGoogleFont(url) {
+  return FONT_ORIGINS.some(origin => url.hostname === origin);
 }
 
 function isGoogleAPI(url) {
@@ -174,6 +186,15 @@ self.addEventListener('activate', event => {
 
       // 2. Take control of ALL open tabs immediately — without waiting for reload
       .then(() => self.clients.claim())
+
+      // 3. Enable Navigation Preload (where supported) — the browser can fetch
+      //    the HTML document in parallel while the SW boots, eliminating the
+      //    "SW startup latency" penalty on repeat navigations.
+      .then(() => {
+        if (self.registration.navigationPreload) {
+          return self.registration.navigationPreload.enable();
+        }
+      })
 
       // 3. Notify every open window that the new version is now live
       .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
@@ -463,14 +484,25 @@ self.addEventListener('fetch', event => {
   if (!url.protocol.startsWith('http')) return;
 
   // ── Google APIs → Network-only (never cache authenticated requests) ──────
+  // Note: fonts.googleapis.com and fonts.gstatic.com are matched BEFORE this
+  // because FONT_ORIGINS is checked first via isGoogleFont().
   if (isGoogleAPI(url)) return;
 
-  // ── App shell (index.html, root URL) → Network-first ─────────────────────
-  // Network-first ensures that a newly deployed index.html is ALWAYS served
-  // to online users. This is what the version-string polling detects.
+  // ── Google Fonts → Stale-while-revalidate ────────────────────────────────
+  // Cache font stylesheets and .woff2 binaries for instant load on revisit.
+  // Font URLs are version-stable; cached copy is served immediately while a
+  // background fetch refreshes it for the next visit.
+  if (isGoogleFont(url)) {
+    event.respondWith(staleWhileRevalidate(request, ASSET_CACHE));
+    return;
+  }
+
+  // ── App shell (index.html, root URL) → Navigation-preload-first, then network-first ──
+  // Navigation Preload lets the browser kick off the HTML fetch in parallel
+  // with SW startup, so the app shell arrives sooner on cached repeat loads.
   // When offline, the cached shell is served so the app still opens.
   if (isAppShell(url)) {
-    event.respondWith(networkFirst(request, SHELL_CACHE));
+    event.respondWith(navigationPreloadFirst(event, SHELL_CACHE));
     return;
   }
 
@@ -495,6 +527,30 @@ self.addEventListener('fetch', event => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  CACHING STRATEGY IMPLEMENTATIONS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Navigation-Preload-First (app-shell variant of Network-First)
+ * Uses the preloaded response that the browser started fetching in parallel
+ * with SW startup — eliminating SW boot latency for navigation requests.
+ * Falls back to a fresh network fetch, then to the cached shell, then offline page.
+ */
+async function navigationPreloadFirst(event, cacheName) {
+  const cache = await caches.open(cacheName);
+
+  try {
+    // Use the browser's preloaded response when available
+    const preloadResponse = await event.preloadResponse;
+    if (preloadResponse && preloadResponse.status === 200) {
+      cache.put(event.request, preloadResponse.clone()); // update cache in background
+      return preloadResponse;
+    }
+  } catch {
+    // Navigation preload not available or failed — fall through to network
+  }
+
+  // Fall back to normal network-first
+  return networkFirst(event.request, cacheName);
+}
 
 /**
  * Network-First

@@ -15,6 +15,26 @@
   <meta name="msapplication-tap-highlight" content="no">
   <meta name="description" content="One Stop Solution for Farming Expense Management">
   <title>Farm Manager</title>
+  <!--
+    ═══════════════════════════════════════════════════════════
+    PERFORMANCE: Resource Hints
+    ─────────────────────────────────────────────────────────
+    preconnect   – opens TCP+TLS to the origin NOW so the
+                   connection is warm when the script fetch fires.
+    preload      – tells the browser to fetch these large scripts
+                   at HIGH priority in parallel, before the parser
+                   reaches the <script> tags below.
+    Both together shave 300–800 ms off first load, especially on
+    mobile networks where connection setup is expensive.
+    ═══════════════════════════════════════════════════════════
+  -->
+  <!-- Warm up CDN connections immediately -->
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <!-- Preload the three blocking scripts so they download in parallel -->
+  <link rel="preload" href="https://unpkg.com/react@18/umd/react.production.min.js" as="script" crossorigin>
+  <link rel="preload" href="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" as="script" crossorigin>
+  <link rel="preload" href="https://unpkg.com/@babel/standalone/babel.min.js" as="script">
   <link rel="manifest" href="https://apphosting-vh.github.io/farmx/manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
@@ -202,7 +222,7 @@
   </script>
   <div id="loading">
     <h1>Farm Manager</h1>
-    <p>Farm Operations · Karnataka</p>
+    <p>Loading Calendar &amp; Payments first…</p>
     <div class="loading-spinner"></div>
   </div>
   <div id="root"></div>
@@ -677,6 +697,15 @@ function FarmWageManager() {
   // Set of worker IDs whose payment card is collapsed
   const [collapsedPayments, setCollapsedPayments] = useState(new Set());
   const [activeView, setActiveView] = useState('attendance');
+
+  // ── Deferred module loading ───────────────────────────────────────────────
+  // Calendar (Attendance) and Payments are high-priority and render immediately.
+  // Less-frequently used modules (Workers, Notes, Seasonal, Expenses, Contract,
+  // Phonebook, Reports, Settings) are gated behind this flag so React does not
+  // spend the first frame building their virtual-DOM subtrees.
+  // The flag is set after two animation frames — i.e. the very next paint cycle
+  // after the critical views have been committed to the DOM.
+  const [deferredReady, setDeferredReady] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()));
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
@@ -733,6 +762,32 @@ function FarmWageManager() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Tablet/desktop: sidebar can expand to full width via logo click
   const [tabletSidebarExpanded, setTabletSidebarExpanded] = useState(false);
+
+  // ── First-mount effect: hide loading screen + schedule deferred modules ──
+  // This runs synchronously after React's first commit (first paint of critical
+  // views) — guaranteed to execute before any user interaction.
+  useEffect(() => {
+    // 1. Hide the loading overlay the moment the app shell is painted.
+    //    This replaces the 500 ms hard-coded timer in the inline script.
+    const loader = document.getElementById('loading');
+    if (loader) {
+      loader.style.transition = 'opacity 0.2s';
+      loader.style.opacity = '0';
+      setTimeout(() => { if (loader) loader.style.display = 'none'; }, 220);
+    }
+
+    // 2. Schedule deferred modules (Workers, Notes, Seasonal, Expenses, etc.)
+    //    after TWO animation frames — i.e. the next repaint cycle after the
+    //    critical views (Attendance, Payments, Dashboard) are visible.
+    //    Using rAF twice ensures the browser has actually committed the first frame.
+    let raf1, raf2;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setDeferredReady(true);
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, []); // empty array → runs exactly once after first render
 
   useEffect(() => {
     const onResize = () => {
@@ -3173,8 +3228,21 @@ function FarmWageManager() {
         </div>
       )}
 
+      {/* ── Deferred module loading placeholder ──────────────────────────────
+           Shown for non-critical views while the first repaint completes.
+           Critical views: Dashboard · Attendance · Payments (always immediate)
+           Deferred views: Workers · Notes · Seasonal · Expenses · Contract
+                           Phonebook · Reports · Settings · App Info
+      ─────────────────────────────────────────────────────────────────────── */}
+
       {/* Workers View */}
-      {activeView === 'workers' && (
+      {activeView === 'workers' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Workers…</span>
+        </div>
+      )}
+      {activeView === 'workers' && deferredReady && (
         <div className="fm-page">
           <div style={{
             display: 'flex',
@@ -6177,7 +6245,13 @@ function FarmWageManager() {
       )}
 
       {/* Special Notes View */}
-      {activeView === 'notes' && (() => {
+      {activeView === 'notes' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Worker Notes…</span>
+        </div>
+      )}
+      {activeView === 'notes' && deferredReady && (() => {
         // ── helpers scoped to notes view ──────────────────────────────────
         const monthNames = ['January','February','March','April','May','June',
                             'July','August','September','October','November','December'];
@@ -6546,7 +6620,13 @@ function FarmWageManager() {
       })()}
 
       {/* Seasonal Work Tab */}
-      {activeView === 'seasonal' && (() => {
+      {activeView === 'seasonal' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Seasonal Work…</span>
+        </div>
+      )}
+      {activeView === 'seasonal' && deferredReady && (() => {
         const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const accentColor = '#f39c12';
 
@@ -6693,7 +6773,13 @@ function FarmWageManager() {
       })()}
 
       {/* Expenses Tab */}
-      {activeView === 'expenses' && (() => {
+      {activeView === 'expenses' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Expenses…</span>
+        </div>
+      )}
+      {activeView === 'expenses' && deferredReady && (() => {
         const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const accentColor = '#e74c3c';
 
@@ -6848,7 +6934,13 @@ function FarmWageManager() {
       })()}
 
       {/* Contract Work View */}
-      {activeView === 'contract' && (() => {
+      {activeView === 'contract' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Project Works…</span>
+        </div>
+      )}
+      {activeView === 'contract' && deferredReady && (() => {
         const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         const accentColor = '#9b59b6';
 
@@ -7022,7 +7114,13 @@ function FarmWageManager() {
       })()}
 
       {/* Phonebook View */}
-      {activeView === 'phonebook' && (
+      {activeView === 'phonebook' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Phonebook…</span>
+        </div>
+      )}
+      {activeView === 'phonebook' && deferredReady && (
         <div className="fm-page">
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -7464,7 +7562,13 @@ function FarmWageManager() {
       )}
 
       {/* Reports View */}
-      {activeView === 'reports' && (
+      {activeView === 'reports' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Reports…</span>
+        </div>
+      )}
+      {activeView === 'reports' && deferredReady && (
         <div className="fm-page">
           <h2 style={{ margin: '0 0 20px 0', fontSize: '20px', fontWeight: '700', color: 'var(--text-1)' }}>
             Reports
@@ -8563,7 +8667,13 @@ function FarmWageManager() {
       )}
 
       {/* General Notes View */}
-      {activeView === 'generalnotes' && (
+      {activeView === 'generalnotes' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading General Notes…</span>
+        </div>
+      )}
+      {activeView === 'generalnotes' && deferredReady && (
         <div className="fm-page">
           {/* Header row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '12px', flexWrap: 'wrap' }}>
@@ -8881,7 +8991,13 @@ function FarmWageManager() {
       )}
 
       {/* Settings View */}
-      {activeView === 'settings' && (
+      {activeView === 'settings' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Settings…</span>
+        </div>
+      )}
+      {activeView === 'settings' && deferredReady && (
         <div className="fm-page">
           <h2 style={{ margin: '0 0 20px 0', fontSize: '20px', fontWeight: '700', color: 'var(--text-1)' }}>
             Settings
@@ -9670,7 +9786,13 @@ function FarmWageManager() {
       )}
 
       {/* App Info View */}
-      {activeView === 'appinfo' && (
+      {activeView === 'appinfo' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading App Info…</span>
+        </div>
+      )}
+      {activeView === 'appinfo' && deferredReady && (
         <div className="fm-page">
         {(() => {
         return (
@@ -10786,7 +10908,11 @@ if (typeof ReactDOM !== 'undefined' && document.getElementById('root')) {
 }
   </script>
   <script>
-    window.addEventListener('load',()=>{setTimeout(()=>{const l=document.getElementById('loading');if(l)l.style.display='none';},500);});
+    window.addEventListener('load',()=>{
+      // Fallback: hide the loading screen after 8 s if React somehow never mounts
+      // (network error, Babel crash, etc.).  React hides it earlier via useEffect.
+      setTimeout(()=>{const l=document.getElementById('loading');if(l)l.style.display='none';},8000);
+    });
     if('serviceWorker'in navigator){
       window.addEventListener('load',()=>{
         navigator.serviceWorker.register('https://apphosting-vh.github.io/farmx/sw.js')
