@@ -926,7 +926,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.4.0';
+  const APP_VERSION = '4.5.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1854,7 +1854,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.2.0'
+      version: '4.5.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1917,6 +1917,13 @@ function FarmWageManager() {
     totalConsumed:   typeof sw.totalConsumed === 'number' ? sw.totalConsumed : parseFloat(sw.totalConsumed) || 0,
     notes:           sw.notes           ?? '',
     assignedWorkers: Array.isArray(sw.assignedWorkers) ? sw.assignedWorkers : [], // added in v2.0
+    dayEntries:      Array.isArray(sw.dayEntries) ? sw.dayEntries.map(e => ({
+      id:          e.id          ?? Date.now() + Math.random(),
+      title:       e.title       ?? '',
+      date:        e.date        ?? '',
+      hoursWorked: typeof e.hoursWorked === 'number' ? e.hoursWorked : (e.hoursWorked ?? ''),
+      comments:    e.comments    ?? '',
+    })) : [],                                                                      // added dayEntries fix
     createdAt:       sw.createdAt       ?? new Date().toISOString(),
   });
 
@@ -2121,7 +2128,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.2.0'
+        version: '4.5.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2400,7 +2407,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '4.2.0',
+        version:  '4.5.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2540,7 +2547,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '4.2.0'
+      version: '4.5.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -9821,7 +9828,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 4.2.0
+              Version 4.5.0
             </p>
           </div>
         </div>
