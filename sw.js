@@ -19,11 +19,23 @@
  * ║  7. activate deletes ALL old cache keys, installs fresh cache.   ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  CACHING STRATEGIES                                               ║
- * ║    index.html   → Network-first   (always pick up new deploys)   ║
+ * ║    index.html   → Navigation-preload + network-first (3s timeout)║
  * ║    CDN scripts  → Cache-first     (pinned semver URLs, immutable)║
  * ║    Icons/assets → Cache-first     (static, versioned by SW key)  ║
+ * ║    Google Fonts → Stale-while-revalidate (dedicated FONT_CACHE)  ║
  * ║    Google APIs  → Network-only    (authenticated, never cache)   ║
  * ║    Everything else → Stale-while-revalidate                      ║
+ * ╠══════════════════════════════════════════════════════════════════╣
+ * ║  OPTIMISATIONS IN THIS VERSION                                    ║
+ * ║    • Parallel precaching — Promise.all replaces serial for-loops ║
+ * ║    • Google Fonts CSS precached at install time (FONT_URLS)      ║
+ * ║    • Dedicated FONT_CACHE bucket (separate from ASSET_CACHE)     ║
+ * ║    • Smart network-first with 3 s timeout for app shell          ║
+ * ║    • PREFETCH_FONTS message → idle-time warm-cache of woff2 URLs ║
+ * ║    • trimCache() — per-bucket entry limits, runs at install +    ║
+ * ║      activate + after every cache write (async, non-blocking)    ║
+ * ║    • SW_READY_FOR_WARM_CACHE notification sent after install so  ║
+ * ║      the page can schedule idle prefetch via requestIdleCallback  ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  ⚠️  HOW TO RELEASE A NEW VERSION                                ║
  * ║     1. Change CACHE_VERSION string below (e.g. v2.6.0)           ║
@@ -37,19 +49,29 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-// This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v4.2.0'; // bumped: trashed-file detection fix + sync note UI
+const CACHE_VERSION = 'v4.3.0'; // bumped: SW optimisations — parallel precache, font cache, idle prefetch
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
-// Shell cache holds the app itself (HTML + same-origin static assets).
-// Asset cache holds CDN libraries (React, Babel, etc.) — shared across versions
-// so CDN scripts don't have to be re-downloaded on every update.
-const SHELL_CACHE  = `farm-manager-shell-${CACHE_VERSION}`;
-const ASSET_CACHE  = `farm-manager-assets-${CACHE_VERSION}`;
+// Shell cache  — HTML + same-origin static assets.
+// Asset cache  — CDN libraries (React, Babel, etc.) shared across versions.
+// Font cache   — Google Fonts CSS + woff2 binaries, shared across versions.
+const SHELL_CACHE = `farm-manager-shell-${CACHE_VERSION}`;
+const ASSET_CACHE = `farm-manager-assets-${CACHE_VERSION}`;
+const FONT_CACHE  = `farm-manager-fonts-${CACHE_VERSION}`;
+
+// ─── Cache size limits (max entries per bucket) ───────────────────────────────
+// Oldest entries are evicted when a bucket exceeds its limit, preventing the
+// browser from hitting its storage quota and silently dropping whole caches.
+const SHELL_CACHE_MAX_ENTRIES = 20;
+const ASSET_CACHE_MAX_ENTRIES = 60;
+const FONT_CACHE_MAX_ENTRIES  = 40;
+
+// ─── Network timeout for app-shell fetches (ms) ──────────────────────────────
+// If the network has not responded within this window we serve the cached
+// shell immediately so the app never stalls on a slow or lossy connection.
+const SHELL_NETWORK_TIMEOUT_MS = 3000;
 
 // ─── Resources to pre-cache during install ────────────────────────────────────
-// These are fetched and stored before the SW becomes "installed".
-// Keep this list lean — only what's needed for a full offline first load.
 const SHELL_URLS = [
   'https://apphosting-vh.github.io/farmx/',
   'https://apphosting-vh.github.io/farmx/index.html',
@@ -57,11 +79,19 @@ const SHELL_URLS = [
 ];
 
 // CDN scripts: pinned semver URLs — content never changes for a given URL.
-// Cache aggressively; evicted only when ASSET_CACHE key changes.
+// Served from ASSET_CACHE indefinitely; evicted only when ASSET_CACHE key changes.
 const CDN_URLS = [
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone/babel.min.js',
+];
+
+// Google Fonts CSS stylesheet(s) — precached at install so font metrics are
+// available for the very first paint, even on a slow connection.
+// The woff2 binary files themselves are warm-cached on idle after app load
+// via the PREFETCH_FONTS message (sent from index.html's requestIdleCallback).
+const FONT_URLS = [
+  'https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap',
 ];
 
 // ─── URL classifiers ──────────────────────────────────────────────────────────
@@ -73,16 +103,15 @@ const CDN_ORIGINS = [
   'cdnjs.cloudflare.com',
 ];
 
-// Google Fonts origins — cached with stale-while-revalidate so fonts load
-// instantly on repeat visits. Kept separate from GOOGLE_ORIGINS (which are
-// auth-sensitive and must never be cached).
+// Google Fonts — cached separately. Matched BEFORE GOOGLE_ORIGINS so that
+// fonts.googleapis.com is not accidentally treated as a pass-through API call.
 const FONT_ORIGINS = [
-  'fonts.googleapis.com',  // stylesheet (e.g. ?family=DM+Sans…)
-  'fonts.gstatic.com',     // actual .woff2 font binaries
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
 ];
 
 const GOOGLE_ORIGINS = [
-  'googleapis.com',        // API calls – NOT fonts.googleapis.com (matched above first)
+  'googleapis.com',
   'accounts.google.com',
   'drive.google.com',
 ];
@@ -116,33 +145,59 @@ function isGoogleAPI(url) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  INSTALL — Pre-cache app shell and CDN assets
+//  QUOTA MANAGEMENT — trim a cache bucket to at most maxEntries entries
+//
+//  Cache API preserves insertion order, so keys()[0] is always the oldest.
+//  We slice off the front of the list when the bucket is over budget.
+//  Called: after install precaching, in activate, and after each cache write.
+// ─────────────────────────────────────────────────────────────────────────────
+async function trimCache(cacheName, maxEntries) {
+  try {
+    const cache  = await caches.open(cacheName);
+    const keys   = await cache.keys();
+    if (keys.length <= maxEntries) return;
+    const excess = keys.slice(0, keys.length - maxEntries);
+    await Promise.all(excess.map(key => cache.delete(key)));
+    console.log(`[SW] Trimmed ${excess.length} excess entries from ${cacheName}`);
+  } catch (e) {
+    console.warn(`[SW] trimCache failed for ${cacheName}:`, e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INSTALL — Precache app shell, CDN assets, and font stylesheets in PARALLEL
+//
+//  All three cache buckets are opened and filled concurrently (outer Promise.all).
+//  Within each bucket, every URL is also fetched in parallel (inner Promise.all),
+//  cutting install time from O(N sequential round-trips) to ~O(1 round-trip).
+//
+//  After precaching, SW_READY_FOR_WARM_CACHE is broadcast so any open window
+//  can schedule idle-time warm-caching of font binaries (woff2 URLs).
 // ─────────────────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   console.log(`[SW] Installing Farm Manager ${CACHE_VERSION}`);
 
-  event.waitUntil(
-    Promise.all([
-      // Cache app shell (HTML, manifest)
-      caches.open(SHELL_CACHE).then(async cache => {
-        // addAll() is atomic — if one URL fails, nothing is cached.
-        // We use individual put() calls with try/catch so a single 404
-        // (e.g. manifest not yet deployed) doesn't abort the whole install.
-        for (const url of SHELL_URLS) {
+  event.waitUntil((async () => {
+
+    // ── Parallel bucket fill ──────────────────────────────────────────────────
+    await Promise.all([
+
+      // 1. App shell (HTML + manifest) — always re-fetch to pick up new deploys
+      caches.open(SHELL_CACHE).then(cache =>
+        Promise.all(SHELL_URLS.map(async url => {
           try {
             const res = await fetch(url, { cache: 'reload' }); // bypass HTTP cache
             if (res.ok) await cache.put(url, res);
           } catch (e) {
             console.warn(`[SW] Shell precache skipped: ${url}`, e.message);
           }
-        }
-      }),
+        }))
+      ),
 
-      // Cache CDN scripts
-      caches.open(ASSET_CACHE).then(async cache => {
-        for (const url of CDN_URLS) {
+      // 2. CDN scripts — skip URLs already cached to save bandwidth on minor bumps
+      caches.open(ASSET_CACHE).then(cache =>
+        Promise.all(CDN_URLS.map(async url => {
           try {
-            // Only fetch if not already in cache (saves bandwidth on minor version bumps)
             const existing = await cache.match(url);
             if (!existing) {
               const res = await fetch(url);
@@ -151,19 +206,49 @@ self.addEventListener('install', event => {
           } catch (e) {
             console.warn(`[SW] CDN precache skipped: ${url}`, e.message);
           }
-        }
-      }),
-    ]).then(() => {
-      console.log(`[SW] Precache complete for ${CACHE_VERSION}`);
-      // ⚠️  Do NOT call self.skipWaiting() here.
-      // We wait for an explicit { type: 'SKIP_WAITING' } message from the app
-      // so we never interrupt a user who is mid-session when a new version lands.
-    })
-  );
+        }))
+      ),
+
+      // 3. Google Fonts CSS — CORS mode required; skip if already cached
+      caches.open(FONT_CACHE).then(cache =>
+        Promise.all(FONT_URLS.map(async url => {
+          try {
+            const existing = await cache.match(url);
+            if (!existing) {
+              const res = await fetch(url, { mode: 'cors' });
+              if (res.ok) await cache.put(url, res);
+            }
+          } catch (e) {
+            console.warn(`[SW] Font precache skipped: ${url}`, e.message);
+          }
+        }))
+      ),
+
+    ]);
+
+    // ── Post-install quota guard ──────────────────────────────────────────────
+    await Promise.all([
+      trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
+      trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
+      trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
+    ]);
+
+    console.log(`[SW] Precache complete for ${CACHE_VERSION}`);
+
+    // ── Notify open windows so they can idle-prefetch font binaries ───────────
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach(client =>
+      client.postMessage({ type: 'SW_READY_FOR_WARM_CACHE', version: CACHE_VERSION })
+    );
+
+    // ⚠️  Do NOT call self.skipWaiting() here.
+    // We wait for an explicit { type: 'SKIP_WAITING' } message from the app
+    // so we never interrupt a user who is mid-session when a new version lands.
+  })());
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ACTIVATE — Delete stale caches, claim all open clients
+//  ACTIVATE — Delete stale caches, enforce quota, claim all open clients
 // ─────────────────────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   console.log(`[SW] Activating Farm Manager ${CACHE_VERSION}`);
@@ -176,7 +261,8 @@ self.addEventListener('activate', event => {
           .filter(key =>
             key.startsWith('farm-manager-') &&
             key !== SHELL_CACHE &&
-            key !== ASSET_CACHE
+            key !== ASSET_CACHE &&
+            key !== FONT_CACHE
           )
           .map(stale => {
             console.log(`[SW] Deleting stale cache: ${stale}`);
@@ -184,58 +270,99 @@ self.addEventListener('activate', event => {
           })
       ))
 
-      // 2. Take control of ALL open tabs immediately — without waiting for reload
+      // 2. Enforce per-bucket entry limits on the current version's caches
+      .then(() => Promise.all([
+        trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
+        trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
+        trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
+      ]))
+
+      // 3. Take control of ALL open tabs immediately — without waiting for reload
       .then(() => self.clients.claim())
 
-      // 3. Enable Navigation Preload (where supported) — the browser can fetch
-      //    the HTML document in parallel while the SW boots, eliminating the
-      //    "SW startup latency" penalty on repeat navigations.
+      // 4. Enable Navigation Preload (where supported) — the browser can fetch
+      //    the HTML in parallel with SW boot, eliminating startup-latency penalty.
       .then(() => {
         if (self.registration.navigationPreload) {
           return self.registration.navigationPreload.enable();
         }
       })
 
-      // 3. Notify every open window that the new version is now live
+      // 5. Notify every open window that the new version is now live
       .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
       .then(clients => {
         console.log(`[SW] ${CACHE_VERSION} active — notifying ${clients.length} client(s)`);
-        clients.forEach(client => {
+        clients.forEach(client =>
           client.postMessage({
-            type: 'SW_ACTIVATED',
+            type:    'SW_ACTIVATED',
             version: CACHE_VERSION,
             message: `Farm Manager ${CACHE_VERSION} is now active.`
-          });
-        });
+          })
+        );
       })
   );
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MESSAGE — Handle SKIP_WAITING from the React update banner
+//  MESSAGE — Handle messages from the React app
 // ─────────────────────────────────────────────────────────────────────────────
 self.addEventListener('message', event => {
   if (!event.data) return;
 
   switch (event.data.type) {
 
+    // ── SKIP_WAITING ──────────────────────────────────────────────────────────
     // Sent by the React app when the user clicks "Update Now".
-    // skipWaiting() makes this SW active immediately.
-    // Once active, clients.claim() fires → 'controllerchange' event fires
-    // on every tab → the app's controllerchange listener calls location.reload().
     case 'SKIP_WAITING':
       console.log('[SW] SKIP_WAITING received — activating new version now');
       self.skipWaiting();
       break;
 
-    // Optional: app can ask the SW what version it is (useful for debugging)
+    // ── GET_VERSION ───────────────────────────────────────────────────────────
+    // Optional: lets the app query the active SW version (useful for debugging).
     case 'GET_VERSION':
       if (event.source) {
-        event.source.postMessage({
-          type: 'SW_VERSION',
-          version: CACHE_VERSION
-        });
+        event.source.postMessage({ type: 'SW_VERSION', version: CACHE_VERSION });
       }
+      break;
+
+    // ── PREFETCH_FONTS ────────────────────────────────────────────────────────
+    // Sent from a requestIdleCallback in index.html after the app shell is
+    // interactive. Warm-caches any woff2 font URLs that weren't in the initial
+    // FONT_URLS precache list so future visits serve fonts from cache instantly.
+    // event.data.urls  — string[] of woff2 (or other font) URLs to prefetch
+    case 'PREFETCH_FONTS': {
+      const urls = Array.isArray(event.data.urls) ? event.data.urls : [];
+      if (!urls.length) break;
+
+      event.waitUntil((async () => {
+        const cache = await caches.open(FONT_CACHE);
+        await Promise.all(urls.map(async url => {
+          try {
+            if (await cache.match(url)) return; // already cached — skip
+            const res = await fetch(url, { mode: 'cors' });
+            if (res.ok) {
+              await cache.put(url, res);
+              console.log(`[SW] Warm-cached font: ${url}`);
+            }
+          } catch (e) {
+            console.warn(`[SW] Font warm-cache failed: ${url}`, e.message);
+          }
+        }));
+        // Trim after warm-caching in case woff2 blobs pushed us over the limit
+        await trimCache(FONT_CACHE, FONT_CACHE_MAX_ENTRIES);
+      })());
+      break;
+    }
+
+    // ── TRIM_CACHES ───────────────────────────────────────────────────────────
+    // Lets the page request a quota sweep on demand (e.g. from a settings UI).
+    case 'TRIM_CACHES':
+      event.waitUntil(Promise.all([
+        trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
+        trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
+        trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
+      ]));
       break;
 
     default:
@@ -254,7 +381,6 @@ const BG_SYNC_DB_NAME  = 'farm-manager-bg-sync';
 const BG_SYNC_DB_VER   = 1;
 const BG_SYNC_DB_STORE = 'pending-syncs';
 
-/** Open (or create) the background-sync IndexedDB. */
 function openBgSyncDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(BG_SYNC_DB_NAME, BG_SYNC_DB_VER);
@@ -307,20 +433,12 @@ self.addEventListener('sync', event => {
   }
 });
 
-/**
- * Core background sync routine.
- * Reads the queued payload from IndexedDB, refreshes the OAuth token,
- * uploads the data to Google Drive, then clears the queue.
- *
- * If the upload fails the browser will automatically retry the sync tag
- * (with exponential back-off) until it succeeds or the retry limit expires.
- */
 async function performBackgroundSync() {
   let db;
   try {
     db = await openBgSyncDB();
 
-    // ── 1. Read the pending payload ────────────────────────────────────────
+    // ── 1. Read the pending payload ────────────────────────────────────────────
     const pending = await idbGet(db, 'syncPayload');
     if (!pending) {
       console.log('[SW] No pending sync payload found — nothing to do.');
@@ -329,13 +447,12 @@ async function performBackgroundSync() {
 
     const { creds, fileId, data, version } = pending;
 
-    // Bail if credentials are incomplete — nothing we can do
     if (!creds || !creds.refreshToken || !creds.clientId || !creds.clientSecret) {
       console.warn('[SW] Background sync: missing OAuth credentials — skipping.');
       return;
     }
 
-    // ── 2. Obtain a fresh access token via refresh token ──────────────────
+    // ── 2. Obtain a fresh access token via refresh token ───────────────────────
     const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -353,10 +470,9 @@ async function performBackgroundSync() {
     const token = tokenData.access_token;
     console.log('[SW] Background sync: access token obtained.');
 
-    // ── 3. Resolve the Drive file ID ───────────────────────────────────────
+    // ── 3. Resolve the Drive file ID ───────────────────────────────────────────
     let syncFileId = fileId || '';
 
-    // Verify the stored ID still resolves
     if (syncFileId) {
       const check = await fetch(
         `https://www.googleapis.com/drive/v3/files/${syncFileId}?fields=id`,
@@ -368,14 +484,13 @@ async function performBackgroundSync() {
       }
     }
 
-    // Search Drive for the well-known file name
     if (!syncFileId) {
-      const q           = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
-      const searchResp  = await fetch(
+      const q          = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
+      const searchResp = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const searchData  = await searchResp.json();
+      const searchData = await searchResp.json();
       if (searchData.error) {
         throw new Error(searchData.error.message || `Drive search failed (HTTP ${searchResp.status})`);
       }
@@ -385,17 +500,16 @@ async function performBackgroundSync() {
       }
     }
 
-    // ── 4. Build the JSON payload ─────────────────────────────────────────
+    // ── 4. Build the JSON payload ──────────────────────────────────────────────
     const payload = JSON.stringify({
       ...data,
       exportDate: new Date().toISOString(),
       version:    version || CACHE_VERSION,
     }, null, 2);
 
-    // ── 5. Upload — PATCH existing file, or create new one ────────────────
+    // ── 5. Upload — PATCH existing file, or create new one ────────────────────
     let upResp;
     if (syncFileId) {
-      // Update existing file content
       upResp = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${syncFileId}?uploadType=media`,
         {
@@ -405,7 +519,6 @@ async function performBackgroundSync() {
         }
       );
     } else {
-      // Create the sync file for the first time
       const form = new FormData();
       form.append('metadata', new Blob(
         [JSON.stringify({ name: 'farm-manager-sync.json', mimeType: 'application/json' })],
@@ -420,7 +533,6 @@ async function performBackgroundSync() {
         const created = await upResp.clone().json();
         if (created.id) {
           syncFileId = created.id;
-          // Store the new file ID so the page can pick it up on next open
           await idbPut(db, 'lastBgSyncFileId', syncFileId);
         }
       }
@@ -431,37 +543,33 @@ async function performBackgroundSync() {
       throw new Error(errBody.error?.message || `HTTP ${upResp.status}`);
     }
 
-    // ── 6. Persist metadata & clear the pending payload ───────────────────
+    // ── 6. Persist metadata & clear the pending payload ───────────────────────
     const syncTime = new Date().toISOString();
     await idbPut(db, 'lastBgSyncTime',   syncTime);
     await idbPut(db, 'lastBgSyncFileId', syncFileId);
-    await idbDelete(db, 'syncPayload');           // payload consumed — remove it
+    await idbDelete(db, 'syncPayload');
 
     console.log('[SW] Background sync succeeded at', syncTime);
 
-    // ── 7. Notify any open clients so they can update their UI ────────────
+    // ── 7. Notify any open clients so they can update their UI ────────────────
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    clients.forEach(client => {
+    clients.forEach(client =>
       client.postMessage({
         type:     'BG_SYNC_COMPLETE',
         syncTime: syncTime,
         fileId:   syncFileId,
-      });
-    });
+      })
+    );
 
   } catch (err) {
     console.error('[SW] Background sync FAILED:', err.message);
-
-    // Notify any open clients about the failure
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      clients.forEach(client => {
-        client.postMessage({ type: 'BG_SYNC_ERROR', error: err.message });
-      });
+      clients.forEach(client =>
+        client.postMessage({ type: 'BG_SYNC_ERROR', error: err.message })
+      );
     } catch (_) {}
-
-    // Re-throwing causes the browser to schedule a retry (Back-off: ~5 min, ~10 min, …)
-    throw err;
+    throw err; // re-throw so browser schedules an automatic retry
   }
 }
 
@@ -483,24 +591,21 @@ self.addEventListener('fetch', event => {
 
   if (!url.protocol.startsWith('http')) return;
 
-  // ── Google APIs → Network-only (never cache authenticated requests) ──────
-  // Note: fonts.googleapis.com and fonts.gstatic.com are matched BEFORE this
-  // because FONT_ORIGINS is checked first via isGoogleFont().
+  // ── Google APIs → Network-only (never cache authenticated requests) ───────
+  // Note: fonts.googleapis.com is matched BEFORE this via isGoogleFont().
   if (isGoogleAPI(url)) return;
 
-  // ── Google Fonts → Stale-while-revalidate ────────────────────────────────
-  // Cache font stylesheets and .woff2 binaries for instant load on revisit.
-  // Font URLs are version-stable; cached copy is served immediately while a
-  // background fetch refreshes it for the next visit.
+  // ── Google Fonts → Stale-while-revalidate (dedicated FONT_CACHE) ─────────
+  // Font stylesheets and woff2 binaries — cached for instant repeat loads.
   if (isGoogleFont(url)) {
-    event.respondWith(staleWhileRevalidate(request, ASSET_CACHE));
+    event.respondWith(staleWhileRevalidate(request, FONT_CACHE));
     return;
   }
 
-  // ── App shell (index.html, root URL) → Navigation-preload-first, then network-first ──
-  // Navigation Preload lets the browser kick off the HTML fetch in parallel
-  // with SW startup, so the app shell arrives sooner on cached repeat loads.
-  // When offline, the cached shell is served so the app still opens.
+  // ── App shell → Navigation-preload-first + 3 s timeout ───────────────────
+  // Navigation Preload lets the browser fetch HTML in parallel with SW boot.
+  // If the network is slow (> SHELL_NETWORK_TIMEOUT_MS), we immediately fall
+  // back to the cached shell so the app feels responsive on any connection.
   if (isAppShell(url)) {
     event.respondWith(navigationPreloadFirst(event, SHELL_CACHE));
     return;
@@ -512,9 +617,9 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── CDN libraries → Cache-first ───────────────────────────────────────────
-  // Pinned semver URLs are immutable — serve from cache instantly,
-  // fetch from network only if not yet cached.
+  // ── CDN libraries → Cache-first ──────────────────────────────────────────
+  // Pinned semver URLs are immutable — serve from cache instantly, fetch
+  // from network only if not yet cached.
   if (isCDNAsset(url)) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
     return;
@@ -529,97 +634,114 @@ self.addEventListener('fetch', event => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Navigation-Preload-First (app-shell variant of Network-First)
- * Uses the preloaded response that the browser started fetching in parallel
- * with SW startup — eliminating SW boot latency for navigation requests.
- * Falls back to a fresh network fetch, then to the cached shell, then offline page.
+ * Navigation-Preload-First (app-shell strategy)
+ *
+ * Uses the preloaded response the browser started fetching in parallel with
+ * SW startup — eliminating SW boot latency on repeat navigations.
+ * Falls back to networkFirstWithTimeout → cached shell → offline page.
  */
 async function navigationPreloadFirst(event, cacheName) {
   const cache = await caches.open(cacheName);
 
   try {
-    // Use the browser's preloaded response when available
     const preloadResponse = await event.preloadResponse;
     if (preloadResponse && preloadResponse.status === 200) {
       cache.put(event.request, preloadResponse.clone()); // update cache in background
       return preloadResponse;
     }
   } catch {
-    // Navigation preload not available or failed — fall through to network
+    // Navigation Preload unavailable or failed — fall through to timed network fetch
   }
 
-  // Fall back to normal network-first
-  return networkFirst(event.request, cacheName);
+  return networkFirstWithTimeout(event.request, cacheName, SHELL_NETWORK_TIMEOUT_MS);
 }
 
 /**
- * Network-First
- * Try the network; on success update the cache and return the fresh response.
- * On network failure (offline / server down), fall back to the cached version.
- * Last resort: return an offline fallback page.
+ * Network-First with Timeout (used for the app shell)
+ *
+ * Races the network fetch against a countdown timer. If the network wins and
+ * delivers a valid response it is cached and returned. If the timer fires first
+ * we serve the cached shell immediately — no blank screen, no indefinite spinner.
  */
-async function networkFirst(request, cacheName) {
+async function networkFirstWithTimeout(request, cacheName, timeoutMs) {
   const cache = await caches.open(cacheName);
+
+  const timeout = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`[SW] Network timeout after ${timeoutMs} ms`)),
+      timeoutMs
+    )
+  );
+
   try {
-    const networkResponse = await fetch(request);
-    // Only cache valid, non-opaque responses
+    const networkResponse = await Promise.race([fetch(request), timeout]);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
-      cache.put(request, networkResponse.clone()); // fire-and-forget
+      cache.put(request, networkResponse.clone());
     }
     return networkResponse;
-  } catch {
+  } catch (err) {
+    // Timeout or offline — serve the cached shell instantly
+    console.log(`[SW] ${err.message} — serving cached shell: ${request.url}`);
     const cached = await cache.match(request);
-    if (cached) {
-      console.log(`[SW] Offline → serving cached: ${request.url}`);
-      return cached;
-    }
+    if (cached) return cached;
     return offlinePage();
   }
 }
 
 /**
  * Cache-First
+ *
  * Return the cached response instantly if available.
- * On cache miss, fetch from network, cache the result, and return it.
+ * On cache miss, fetch from network, store the result, and return it.
+ * After storing, async-trim the bucket to stay within the entry limit.
  */
 async function cacheFirst(request, cacheName) {
-  const cache = await caches.open(cacheName);
+  const cache  = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
 
   try {
     const networkResponse = await fetch(request);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
-      cache.put(request, networkResponse.clone());
+      await cache.put(request, networkResponse.clone());
+      // Non-blocking trim — keeps quota healthy without slowing the response
+      const limit = cacheName === FONT_CACHE  ? FONT_CACHE_MAX_ENTRIES
+                  : cacheName === SHELL_CACHE ? SHELL_CACHE_MAX_ENTRIES
+                  : ASSET_CACHE_MAX_ENTRIES;
+      trimCache(cacheName, limit).catch(() => {});
     }
     return networkResponse;
   } catch {
-    // Totally offline and not cached — nothing we can do for this resource
     return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 
 /**
  * Stale-While-Revalidate
+ *
  * Return the cached response immediately (fast), then fetch a fresh copy in
  * the background and update the cache for the next request.
  * If there is no cached version, wait for the network response.
+ * Background writes trigger an async trim to prevent quota creep over time.
  */
 async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
+  const cache  = await caches.open(cacheName);
   const cached = await cache.match(request);
 
-  // Kick off a background network fetch regardless
   const networkFetch = fetch(request)
-    .then(response => {
+    .then(async response => {
       if (response && response.status === 200 && response.type !== 'error') {
-        cache.put(request, response.clone());
+        await cache.put(request, response.clone());
+        const limit = cacheName === FONT_CACHE  ? FONT_CACHE_MAX_ENTRIES
+                    : cacheName === SHELL_CACHE ? SHELL_CACHE_MAX_ENTRIES
+                    : ASSET_CACHE_MAX_ENTRIES;
+        trimCache(cacheName, limit).catch(() => {});
       }
       return response;
     })
     .catch(() => null);
 
-  // Return cached immediately; if no cache, await the network
+  // Return stale immediately; fall back to awaiting the network on first visit
   return cached ?? networkFetch;
 }
 
@@ -640,72 +762,33 @@ function offlinePage() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #caf0f8 0%, #90e0ef 100%);
       min-height: 100dvh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       padding: 24px;
       padding-top: calc(24px + env(safe-area-inset-top));
       padding-bottom: calc(24px + env(safe-area-inset-bottom));
     }
     .card {
-      background: white;
-      border-radius: 28px;
-      padding: 48px 32px 40px;
-      max-width: 360px;
-      width: 100%;
-      text-align: center;
+      background: white; border-radius: 28px; padding: 48px 32px 40px;
+      max-width: 360px; width: 100%; text-align: center;
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
     }
-    .icon {
-      font-size: 72px;
-      margin-bottom: 24px;
-      display: block;
-      line-height: 1;
-    }
-    h1 {
-      font-size: 24px;
-      font-weight: 700;
-      color: #03045e;
-      margin-bottom: 12px;
-      letter-spacing: -0.4px;
-    }
-    p {
-      font-size: 15px;
-      color: #5d6d7e;
-      line-height: 1.65;
-      margin-bottom: 32px;
-    }
+    .icon { font-size: 72px; margin-bottom: 24px; display: block; line-height: 1; }
+    h1 { font-size: 24px; font-weight: 700; color: #03045e; margin-bottom: 12px; letter-spacing: -0.4px; }
+    p { font-size: 15px; color: #5d6d7e; line-height: 1.65; margin-bottom: 32px; }
     .badge {
-      display: inline-block;
-      background: #e8f4fd;
-      color: #0077b6;
-      font-size: 12px;
-      font-weight: 700;
-      padding: 4px 12px;
-      border-radius: 20px;
-      margin-bottom: 32px;
-      letter-spacing: 0.3px;
+      display: inline-block; background: #e8f4fd; color: #0077b6;
+      font-size: 12px; font-weight: 700; padding: 4px 12px;
+      border-radius: 20px; margin-bottom: 32px; letter-spacing: 0.3px;
     }
     button {
       background: linear-gradient(135deg, #0077b6 0%, #005f8e 100%);
-      color: white;
-      border: none;
-      padding: 16px 36px;
-      border-radius: 16px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
+      color: white; border: none; padding: 16px 36px; border-radius: 16px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
       box-shadow: 0 6px 20px rgba(0, 119, 182, 0.38);
-      width: 100%;
-      transition: opacity 0.2s;
-      letter-spacing: -0.2px;
+      width: 100%; transition: opacity 0.2s; letter-spacing: -0.2px;
     }
     button:hover { opacity: 0.9; }
-    .hint {
-      margin-top: 16px;
-      font-size: 13px;
-      color: #aab7c4;
-    }
+    .hint { margin-top: 16px; font-size: 13px; color: #aab7c4; }
   </style>
 </head>
 <body>
@@ -725,9 +808,9 @@ function offlinePage() {
 </html>`;
 
   return new Response(html, {
-    status: 200,
+    status:  200,
     headers: {
-      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
     }
   });

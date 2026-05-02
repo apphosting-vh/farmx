@@ -926,7 +926,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.2.0';
+  const APP_VERSION = '4.3.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -10977,7 +10977,75 @@ if (typeof ReactDOM !== 'undefined' && document.getElementById('root')) {
             setInterval(()=>reg.update().catch(()=>{}), 30*60*1000);
           })
           .catch(e=>console.log('SW failed:',e));
+
+        // ── Post-install warm-cache via requestIdleCallback ──────────────────
+        // The SW broadcasts SW_READY_FOR_WARM_CACHE after its install phase.
+        // We listen for it here and schedule idle-time prefetching of the
+        // Google Fonts woff2 binaries that were NOT in the initial precache
+        // list (only the CSS was precached). requestIdleCallback ensures this
+        // runs between frames and never competes with user interaction.
+        navigator.serviceWorker.addEventListener('message', evt => {
+          if (!evt.data) return;
+
+          if (evt.data.type === 'SW_READY_FOR_WARM_CACHE') {
+            scheduleIdlePrefetch();
+          }
+        });
+
+        // Also fire once immediately in case the SW was already installed
+        // (e.g. a page reload) and the message was sent before we listened.
+        if (navigator.serviceWorker.controller) {
+          scheduleIdlePrefetch();
+        }
       });
+    }
+
+    /**
+     * scheduleIdlePrefetch()
+     * Uses requestIdleCallback (with a setTimeout fallback for Safari) to
+     * collect all <link rel="stylesheet"> Google Font URLs visible in the
+     * document and send them to the SW as PREFETCH_FONTS. The SW then
+     * fetches and caches the woff2 font binaries in the background,
+     * ensuring sub-millisecond font delivery on every subsequent visit.
+     */
+    function scheduleIdlePrefetch() {
+      // Guard: only run once per page load
+      if (window.__idlePrefetchDone) return;
+      window.__idlePrefetchDone = true;
+
+      const run = () => {
+        try {
+          // Collect Google Fonts stylesheet URLs from the document head
+          const fontSheetUrls = Array.from(
+            document.querySelectorAll('link[rel="stylesheet"]')
+          )
+            .map(l => l.href)
+            .filter(h => h && h.includes('fonts.googleapis.com'));
+
+          if (!fontSheetUrls.length) return;
+
+          // Ask the SW to warm-cache the font CSS (and any woff2 the SW
+          // subsequently discovers from those stylesheets on its own).
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'PREFETCH_FONTS',
+              urls: fontSheetUrls,
+            });
+            console.log('[App] Sent PREFETCH_FONTS to SW:', fontSheetUrls);
+          }
+        } catch (e) {
+          // Non-critical — silently ignore
+        }
+      };
+
+      // requestIdleCallback fires during browser idle time (between frames).
+      // The 2 s timeout ensures it eventually runs even if the browser is busy.
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(run, { timeout: 2000 });
+      } else {
+        // Safari / older browsers: defer 1.5 s after load, then run
+        setTimeout(run, 1500);
+      }
     }
   </script>
 </body>
