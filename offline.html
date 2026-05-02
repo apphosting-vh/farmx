@@ -907,6 +907,7 @@ function FarmWageManager() {
   const [gcpAccessToken, setGcpAccessToken] = useState('');
   const [gcpSyncStatus, setGcpSyncStatus] = useState('idle'); // 'idle'|'syncing'|'success'|'error'|'pending'
   const [gcpSyncError, setGcpSyncError] = useState('');
+  const [gcpSyncNote, setGcpSyncNote] = useState('');   // informational (non-error) messages
   const [gcpPullStatus, setGcpPullStatus] = useState('idle'); // 'idle'|'pulling'|'success'|'error'
   const [gcpPullError, setGcpPullError] = useState('');
   // Refs to always hold latest values inside debounced callbacks
@@ -925,7 +926,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.1.0';
+  const APP_VERSION = '4.2.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1853,7 +1854,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.1.0'
+      version: '4.2.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2120,7 +2121,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.1.0'
+        version: '4.2.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2399,7 +2400,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '4.1.0',
+        version:  '4.2.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2453,20 +2454,34 @@ function FarmWageManager() {
     return token;
   };
 
-  // Find or create the farm-manager-sync.json file; returns file ID
+  // Find or create the farm-manager-sync.json file.
+  // Returns { fileId, wasRecreated } where wasRecreated=true means the file
+  // was missing/trashed and a brand-new one has been created on Drive.
   const gcpFindOrCreateFile = async (token, content) => {
     const existingId = gcpFileIdRef.current;
-    // Verify stored ID still exists
+    // Verify stored ID still exists AND is not in Trash.
+    // IMPORTANT: the Drive API returns HTTP 200 for trashed files when fetching
+    // by ID, so we must also check the `trashed` field — otherwise we silently
+    // PATCH a trashed file and the user never sees the update in their Drive.
     if (existingId) {
       const check = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${existingId}?fields=id`,
+        `https://www.googleapis.com/drive/v3/files/${existingId}?fields=id,trashed`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (check.ok) return existingId;
+      if (check.ok) {
+        const checkData = await check.json();
+        if (!checkData.trashed) {
+          // File exists and is visible in Drive — all good
+          return { fileId: existingId, wasRecreated: false };
+        }
+        // File is in Trash — treat as missing and fall through to create
+        console.log('[App] gcpFindOrCreateFile: stored sync file is in Trash — will create a new one.');
+      }
+      // ID returned 404 or file is trashed — clear the stale reference
       setGcpSyncFileId('');
       gcpFileIdRef.current = '';
     }
-    // Search by name
+    // Search Drive for a non-trashed copy by name
     const q = encodeURIComponent("name='farm-manager-sync.json' and trashed=false");
     const searchResp = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
@@ -2478,9 +2493,10 @@ function FarmWageManager() {
       const id = searchData.files[0].id;
       setGcpSyncFileId(id);
       gcpFileIdRef.current = id;
-      return id;
+      return { fileId: id, wasRecreated: false };
     }
-    // Create new file with initial content
+    // No file found anywhere — create a fresh one
+    console.log('[App] gcpFindOrCreateFile: no sync file found in Drive — creating a new one.');
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify({ name: 'farm-manager-sync.json', mimeType: 'application/json' })], { type: 'application/json' }));
     form.append('file', new Blob([content], { type: 'application/json' }));
@@ -2492,7 +2508,7 @@ function FarmWageManager() {
     if (created.error) throw new Error(created.error.message || 'Failed to create sync file');
     setGcpSyncFileId(created.id);
     gcpFileIdRef.current = created.id;
-    return created.id;
+    return { fileId: created.id, wasRecreated: true };
   };
 
   // Core sync operation — called from debounced trigger
@@ -2519,57 +2535,73 @@ function FarmWageManager() {
 
     setGcpSyncStatus('syncing');
     setGcpSyncError('');
+    setGcpSyncNote('');   // clear any previous informational note
 
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '4.1.0'
+      version: '4.2.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
       const payload = buildPayload();
-      const fileId = await gcpFindOrCreateFile(token, payload);
+      const { fileId, wasRecreated } = await gcpFindOrCreateFile(token, payload);
 
       // ── Drive conflict check ──────────────────────────────────────────────
       // Before overwriting, fetch the file's modifiedTime from Drive.
       // If Drive is newer than our last successful sync it means another device
       // has pushed changes — surface a conflict warning in the UI.
-      try {
-        const metaResp = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (metaResp.ok) {
-          const meta = await metaResp.json();
-          const driveModified = meta.modifiedTime; // ISO string
-          const syncTime = lastSyncTimeRef.current;
-          if (driveModified && syncTime && driveModified > syncTime) {
-            // Drive has data newer than our last sync — another device pushed
-            setGcpSyncError('⚠ Drive has newer data — consider pulling first to avoid overwriting remote edits.');
-            // We still proceed with push (local always wins in auto-sync), but the
-            // warning gives the user a chance to pull manually if they prefer.
+      // Skip the conflict check when wasRecreated — there is no pre-existing
+      // remote state to conflict with.
+      if (!wasRecreated) {
+        try {
+          const metaResp = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (metaResp.ok) {
+            const meta = await metaResp.json();
+            const driveModified = meta.modifiedTime; // ISO string
+            const syncTime = lastSyncTimeRef.current;
+            if (driveModified && syncTime && driveModified > syncTime) {
+              // Drive has data newer than our last sync — another device pushed
+              setGcpSyncError('⚠ Drive has newer data — consider pulling first to avoid overwriting remote edits.');
+              // We still proceed with push (local always wins in auto-sync), but the
+              // warning gives the user a chance to pull manually if they prefer.
+            }
           }
-        }
-      } catch (_) { /* metadata fetch is best-effort; proceed regardless */ }
-
-      // Update file content
-      const upResp = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
-        { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: payload }
-      );
-      if (!upResp.ok) {
-        const errBody = await upResp.json().catch(() => ({}));
-        throw new Error(errBody.error?.message || `HTTP ${upResp.status}`);
+        } catch (_) { /* metadata fetch is best-effort; proceed regardless */ }
       }
+
+      // Update file content (skip the redundant PATCH when wasRecreated, since
+      // gcpFindOrCreateFile already uploaded the full payload during creation)
+      if (!wasRecreated) {
+        const upResp = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+          { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: payload }
+        );
+        if (!upResp.ok) {
+          const errBody = await upResp.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || `HTTP ${upResp.status}`);
+        }
+      }
+
+      return wasRecreated;
     };
 
     try {
       const token = tokenOverride || await gcpGetToken();
-      await doWithToken(token);
+      const wasRecreated = await doWithToken(token);
       const now = new Date().toISOString();
       setLastSyncTime(now);
       lastSyncTimeRef.current = now; // keep ref in sync for event handlers
       setGcpSyncStatus('success');
+      // If the sync file was missing/trashed and had to be recreated, surface
+      // an informational note so the user knows what happened.
+      if (wasRecreated) {
+        setGcpSyncNote('ℹ Sync file was missing from Drive and has been recreated automatically.');
+        setTimeout(() => setGcpSyncNote(''), 8000);
+      }
       clearPendingSyncData();   // ← BUG-02 fix: remove IDB payload after normal success
       setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
     } catch (err) {
@@ -2586,11 +2618,15 @@ function FarmWageManager() {
           const fresh = await gcpRefreshTokenFn(creds.refreshToken);
           setGcpAccessToken(fresh);
           gcpAccessTokenRef.current = fresh;
-          await doWithToken(fresh);
+          const wasRecreated2 = await doWithToken(fresh);
           const now = new Date().toISOString();
           setLastSyncTime(now);
           lastSyncTimeRef.current = now;
           setGcpSyncStatus('success');
+          if (wasRecreated2) {
+            setGcpSyncNote('ℹ Sync file was missing from Drive and has been recreated automatically.');
+            setTimeout(() => setGcpSyncNote(''), 8000);
+          }
           clearPendingSyncData();   // ← sync succeeded — remove IDB payload
           setTimeout(() => setGcpSyncStatus(s => s === 'success' ? 'idle' : s), 3000);
           return;
@@ -9377,6 +9413,12 @@ function FarmWageManager() {
                   ⚠ {gcpSyncStatus === 'error' ? gcpSyncError : gcpPullError}
                 </div>
               )}
+              {/* Informational note — shown when the sync file was missing and recreated */}
+              {gcpSyncNote && (
+                <div style={{ marginTop: '8px', padding: '8px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8', lineHeight: '1.5' }}>
+                  {gcpSyncNote}
+                </div>
+              )}
             </div>
 
             {/* ── Sign-in / Disconnect ── */}
@@ -9779,7 +9821,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 4.1.0
+              Version 4.2.0
             </p>
           </div>
         </div>

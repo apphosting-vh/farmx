@@ -38,7 +38,7 @@
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
 // This single string change is all that's needed to trigger the update flow.
-const CACHE_VERSION = 'v4.1.0'; // bumped: navigation preload + font caching
+const CACHE_VERSION = 'v4.2.0'; // bumped: trashed-file detection fix + sync note UI
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache holds the app itself (HTML + same-origin static assets).
