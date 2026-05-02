@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v4.7.0'; // bumped: fix isGoogleAPI/isGoogleFont classifier order + hardened guard
+const CACHE_VERSION = 'v4.8.0'; // bumped: fix isGoogleAPI/isGoogleFont classifier order + hardened guard
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
