@@ -926,7 +926,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '4.5.0';
+  const APP_VERSION = '4.6.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1854,7 +1854,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '4.5.0'
+      version: '4.6.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2128,7 +2128,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '4.5.0'
+        version: '4.6.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2407,7 +2407,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '4.5.0',
+        version:  '4.6.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2547,7 +2547,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '4.5.0'
+      version: '4.6.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -9828,7 +9828,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 4.5.0
+              Version 4.6.0
             </p>
           </div>
         </div>
@@ -9846,6 +9846,49 @@ function FarmWageManager() {
         {(() => {
         return (
           <>
+            {/* ── Version Details ─────────────────────────────────────── */}
+            <div style={{ background:'var(--card)', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', marginBottom:'20px' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-2)', marginBottom:'14px' }}>Version Details</div>
+              {/* index.html references */}
+              <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
+              {[
+                { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
+                { label: 'Local Backup Payload',          value: '4.6.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '4.6.0',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '4.6.0',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '4.6.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '4.6.0',      desc: 'Version string shown in the Settings panel header' },
+              ].map(({ label, value, desc }) => (
+                <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'var(--text-1)' }}>{label}</div>
+                    <div style={{ fontSize:'11px', color:'var(--text-3)', marginTop:'2px' }}>{desc}</div>
+                  </div>
+                  <span style={{ flexShrink:0, fontSize:'12px', fontWeight:'700', fontFamily:'DM Mono, monospace', padding:'3px 10px', borderRadius:'20px', background:'rgba(0,184,150,0.10)', color:'var(--teal)', border:'1px solid rgba(0,184,150,0.25)' }}>
+                    v{value}
+                  </span>
+                </div>
+              ))}
+              {/* sw.js references */}
+              <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
+              {[
+                { label: 'CACHE_VERSION',   value: 'v4.6.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v4.6.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v4.6.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v4.6.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+              ].map(({ label, value, desc }) => (
+                <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'var(--text-1)' }}>{label}</div>
+                    <div style={{ fontSize:'11px', color:'var(--text-3)', marginTop:'2px' }}>{desc}</div>
+                  </div>
+                  <span style={{ flexShrink:0, fontSize:'12px', fontWeight:'700', fontFamily:'DM Mono, monospace', padding:'3px 10px', borderRadius:'20px', background:'rgba(0,120,200,0.10)', color:'#3b82f6', border:'1px solid rgba(59,130,246,0.25)', maxWidth:'200px', wordBreak:'break-all', textAlign:'right' }}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {/* ── Stack / Tech ────────────────────────────────────────── */}
             <div style={{ background:'var(--card)', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', marginBottom:'20px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-2)', marginBottom:'14px' }}>Tech Stack</div>
