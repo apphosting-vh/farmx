@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v4.3.0'; // bumped: SW optimisations — parallel precache, font cache, idle prefetch
+const CACHE_VERSION = 'v4.4.0'; // bumped: fix isGoogleAPI/isGoogleFont classifier order + hardened guard
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
@@ -141,6 +141,9 @@ function isGoogleFont(url) {
 }
 
 function isGoogleAPI(url) {
+  // Explicitly exclude font origins: fonts.googleapis.com ends with
+  // "googleapis.com" and must never be treated as a pass-through API call.
+  if (isGoogleFont(url)) return false;
   return GOOGLE_ORIGINS.some(origin => url.hostname.endsWith(origin));
 }
 
@@ -591,16 +594,21 @@ self.addEventListener('fetch', event => {
 
   if (!url.protocol.startsWith('http')) return;
 
-  // ── Google APIs → Network-only (never cache authenticated requests) ───────
-  // Note: fonts.googleapis.com is matched BEFORE this via isGoogleFont().
-  if (isGoogleAPI(url)) return;
-
   // ── Google Fonts → Stale-while-revalidate (dedicated FONT_CACHE) ─────────
-  // Font stylesheets and woff2 binaries — cached for instant repeat loads.
+  // ⚠️  MUST be checked BEFORE isGoogleAPI.
+  // fonts.googleapis.com hostname ends with "googleapis.com", so if isGoogleAPI
+  // ran first it would match and pass font requests through as network-only,
+  // bypassing the cache entirely and breaking offline font delivery.
   if (isGoogleFont(url)) {
     event.respondWith(staleWhileRevalidate(request, FONT_CACHE));
     return;
   }
+
+  // ── Google APIs → Network-only (never cache authenticated requests) ───────
+  // Covers oauth2.googleapis.com (token refresh), www.googleapis.com (Drive
+  // API), accounts.google.com, and drive.google.com.  All auth-bearing
+  // requests must hit the network every time — no caching, no interception.
+  if (isGoogleAPI(url)) return;
 
   // ── App shell → Navigation-preload-first + 3 s timeout ───────────────────
   // Navigation Preload lets the browser fetch HTML in parallel with SW boot.
