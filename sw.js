@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 2.5.0                                            ║
- * ║  Cache Key    : farm-manager-v2.5.0                              ║
+ * ║  Version      : 4.9.1                                            ║
+ * ║  Cache Key    : farm-manager-v4.9.1                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v4.8.0'; // bumped: fix isGoogleAPI/isGoogleFont classifier order + hardened guard
+const CACHE_VERSION = 'v4.9.1'; // bumped: Total Project Cost = Item + Labor auto-sum; v4.9.1
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
