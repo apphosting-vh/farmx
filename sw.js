@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 4.9.1                                            ║
- * ║  Cache Key    : farm-manager-v4.9.1                              ║
+ * ║  Version      : 5.0.0                                            ║
+ * ║  Cache Key    : farm-manager-v5.0.0                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v4.9.1'; // bumped: Total Project Cost = Item + Labor auto-sum; v4.9.1
+const CACHE_VERSION = 'v5.0.0'; // bumped: Total Project Cost = Item + Labor auto-sum; v5.0.0
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
@@ -75,6 +75,7 @@ const SHELL_NETWORK_TIMEOUT_MS = 3000;
 const SHELL_URLS = [
   'https://apphosting-vh.github.io/farmx/',
   'https://apphosting-vh.github.io/farmx/index.html',
+  'https://apphosting-vh.github.io/farmx/app-core.js',
   'https://apphosting-vh.github.io/farmx/manifest.json',
 ];
 
