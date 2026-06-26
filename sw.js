@@ -83,7 +83,7 @@ const SHELL_URLS = [
 const CDN_URLS = [
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-  'https://unpkg.com/@babel/standalone/babel.min.js',
+  'https://unpkg.com/@babel/standalone@7.26.0/babel.min.js',
 ];
 
 // Google Fonts CSS stylesheet(s) — precached at install so font metrics are
