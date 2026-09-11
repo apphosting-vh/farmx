@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v5.0.0'; // bumped: Total Project Cost = Item + Labor auto-sum; v5.0.0
+const CACHE_VERSION = 'v5.1.0'; // bumped: Total Project Cost = Item + Labor auto-sum; v5.0.0
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.

@@ -313,6 +313,331 @@ const Icons = {
 };
 
 
+
+// ── YearlyWorkerCostsReport ───────────────────────────────────────────────────
+// Detailed worker-wise cost table for a selected year.
+// Columns: Earnings (E) · Payments (P) · Credit Deposits (D) · Opening Balance
+// as of January 1 · Outstanding · Net Outstanding.
+// Opening Balance is the worker's balance immediately before January 1 of the
+// selected year. Net Outstanding = Opening Balance + E + D - P.
+// Each worker row expands to a month-by-month drill-down.
+function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [expanded, setExpanded] = React.useState(new Set());
+
+  const toggle = (id) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // One pass over (worker × month): build per-month stats then roll up to a
+  // per-worker yearly row. Memoised on the data + year so re-renders of the
+  // Reports view (theme change, sidebar toggle, etc.) do not rescan arrays.
+  const rows = React.useMemo(() => {
+    return workers.map(worker => {
+      const months = [];
+      let E = 0, P = 0, D = 0;
+
+      // Opening balance as of January 1 of the selected year.
+      // The worker's stored openingBalance is the starting balance at creation.
+      // Roll it forward through all activity strictly before January 1 so the
+      // yearly report starts from the actual carried-forward balance.
+      const yearStart = `${year}-01-01`;
+      const workerCreatedDate = worker.createdAt
+        ? String(worker.createdAt).slice(0, 10)
+        : yearStart;
+      let openingBalance = 0;
+
+      if (workerCreatedDate <= yearStart) {
+        openingBalance = Number(worker.openingBalance) || 0;
+
+        attendance.forEach(a => {
+          if (a.workerId !== worker.id || !a.date || a.date >= yearStart) return;
+          const wage = Number(worker.dailyWage) || 0;
+          if (a.status === 'present') openingBalance += wage;
+          else if (a.status === 'half_day') openingBalance += wage * 0.5;
+        });
+
+        payments.forEach(p => {
+          if (p.workerId !== worker.id || !p.date || p.date >= yearStart) return;
+          const amount = Number(p.amount) || 0;
+          if (p.type === 'payment') openingBalance -= amount;
+          else if (p.type === 'credit') openingBalance += amount;
+        });
+      }
+
+      for (let m = 1; m <= 12; m++) {
+        const monthStr = `${year}-${String(m).padStart(2, '0')}`;
+
+        const mAtt = attendance.filter(a =>
+          a.workerId === worker.id && a.date.startsWith(monthStr)
+        );
+        const fullDays  = mAtt.filter(a => a.status === 'present').length;
+        const halfDays  = mAtt.filter(a => a.status === 'half_day').length;
+        const mE = (fullDays * worker.dailyWage) + (halfDays * worker.dailyWage * 0.5);
+
+        const mP = payments
+          .filter(p => p.workerId === worker.id && p.date.startsWith(monthStr) && p.type === 'payment')
+          .reduce((s, p) => s + p.amount, 0);
+
+        const mD = payments
+          .filter(p => p.workerId === worker.id && p.date.startsWith(monthStr) && p.type === 'credit')
+          .reduce((s, p) => s + p.amount, 0);
+
+        E += mE; P += mP; D += mD;
+        months.push({ month: m, monthStr, E: mE, P: mP, D: mD, fullDays, halfDays });
+      }
+      return {
+        worker,
+        E, P, D,
+        openingBalance,
+        outstanding: E + D - P,
+        netOutstanding: openingBalance + E + D - P,
+        months: months.filter(mm => mm.E !== 0 || mm.P !== 0 || mm.D !== 0)
+      };
+    });
+  }, [workers, attendance, payments, year]);
+
+  // Only surface workers who actually had activity in this year.
+  const activeRows = rows.filter(r => r.E !== 0 || r.P !== 0 || r.D !== 0 || r.openingBalance !== 0);
+
+  const totals = {
+    E: activeRows.reduce((s, r) => s + r.E, 0),
+    P: activeRows.reduce((s, r) => s + r.P, 0),
+    D: activeRows.reduce((s, r) => s + r.D, 0),
+    openingBalance: activeRows.reduce((s, r) => s + r.openingBalance, 0),
+  };
+  totals.outstanding = totals.E + totals.D - totals.P;
+  totals.netOutstanding = totals.openingBalance + totals.outstanding;
+
+  const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
+
+  const thBase = {
+    padding: '10px 12px',
+    fontSize: '11px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--text-2)',
+    textAlign: 'right',
+    borderBottom: '2px solid var(--border)',
+    whiteSpace: 'nowrap',
+    background: 'var(--surface)',
+  };
+  const tdNum = {
+    padding: '12px',
+    borderBottom: '1px solid var(--border)',
+    textAlign: 'right',
+    whiteSpace: 'nowrap',
+    fontFamily: "'DM Mono', monospace",
+    fontSize: '14px',
+    color: 'var(--text-1)',
+  };
+
+  return (
+    <div style={{
+      background: 'var(--card)',
+      borderRadius: '16px',
+      padding: '24px',
+      marginBottom: '16px',
+      border: '1px solid var(--border)',
+      boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+    }}>
+      <h3 style={{
+        margin: '0 0 20px 0',
+        fontSize: '20px',
+        fontWeight: '700',
+        color: 'var(--text-1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        Worker Costs — {year}
+      </h3>
+
+      {activeRows.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-2)' }}>
+          <p style={{ margin: 0, fontWeight: '500' }}>
+            No earnings, payments or credit deposits recorded for {year}.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* ── Year totals strip ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: totals.D > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+            gap: '12px',
+            marginBottom: '20px'
+          }}>
+            <div style={{ padding: '16px', background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', borderRadius: '12px', color: 'white' }}>
+              <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Earnings (E)</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.E)}</div>
+              <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Wages earned in {year}</div>
+            </div>
+            <div style={{ padding: '16px', background: 'var(--navy)', borderRadius: '12px', color: 'white' }}>
+              <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Payments (P)</div>
+              <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.P)}</div>
+              <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Paid to workers in {year}</div>
+            </div>
+            {totals.D > 0 && (
+              <div style={{ padding: '16px', background: '#0077b6', borderRadius: '12px', color: 'white' }}>
+                <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Credit Deposits (D)</div>
+                <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.D)}</div>
+                <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Credit extended in {year}</div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Expand / collapse all ── */}
+          {activeRows.length > 1 && (
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '10px' }}>
+              <button onClick={() => setExpanded(new Set())} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}>⊞ Rows</button>
+              <button onClick={() => setExpanded(new Set(activeRows.map(r => r.worker.id)))} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}>⊟ Rows</button>
+            </div>
+          )}
+
+          {/* ── Worker-wise table ── */}
+          <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '640px' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thBase, textAlign: 'left' }}>Worker</th>
+                  <th style={thBase}>Daily Wage</th>
+                  <th style={thBase}>Earnings (E)</th>
+                  <th style={thBase}>Payments (P)</th>
+                  <th style={thBase}>Credit Deposits (D)</th>
+                  <th style={thBase}>Opening Balance<br/>as of Jan 1</th>
+                  <th style={{ ...thBase, color: 'var(--teal)' }}>Outstanding (E+D−P)</th>
+                  <th style={{ ...thBase, color: 'var(--teal)' }}>Net Outstanding</th>
+                  <th style={{ ...thBase, width: '40px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeRows.map((r, idx) => {
+                  const isOpen = expanded.has(r.worker.id);
+                  return [
+                    /* ── worker summary row ── */
+                    <tr
+                      key={r.worker.id}
+                      onClick={() => toggle(r.worker.id)}
+                      style={{
+                        background: idx % 2 === 0 ? 'var(--card)' : 'var(--surface)',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s'
+                      }}
+                    >
+                      <td style={{ ...tdNum, textAlign: 'left', fontFamily: 'inherit', fontWeight: '700', fontSize: '14px', color: 'var(--text-1)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            width: '14px', height: '14px',
+                            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.2s ease',
+                            color: 'var(--text-2)', lineHeight: 1
+                          }}><div style={{width:'14px',height:'14px'}}>{Icons.chevronRight}</div></span>
+                          {r.worker.name}
+                        </span>
+                      </td>
+                      <td style={tdNum}>{fmt(r.worker.dailyWage)}</td>
+                      <td style={{ ...tdNum, color: 'var(--teal)', fontWeight: '700' }}>{fmt(r.E)}</td>
+                      <td style={{ ...tdNum, color: 'var(--danger)' }}>{fmt(r.P)}</td>
+                      <td style={{ ...tdNum, color: '#0077b6' }}>{fmt(r.D)}</td>
+                      <td style={{ ...tdNum, color: 'var(--text-2)' }}>{fmt(r.openingBalance)}</td>
+                      <td style={{
+                        ...tdNum,
+                        fontWeight: '700',
+                        fontSize: '15px',
+                        color: r.outstanding > 0 ? 'var(--teal)' : r.outstanding < 0 ? 'var(--danger)' : 'var(--text-2)',
+                        background: r.outstanding > 0 ? 'rgba(0,184,150,0.06)' : r.outstanding < 0 ? 'rgba(217,54,54,0.06)' : 'transparent'
+                      }}>
+                        {fmt(r.outstanding)}
+                        <div style={{ fontSize: '10px', fontWeight: '600', opacity: 0.75 }}>
+                          {r.outstanding > 0 ? 'current year' : r.outstanding < 0 ? 'overpaid' : 'settled'}
+                        </div>
+                      </td>
+                      <td style={{
+                        ...tdNum,
+                        fontWeight: '700',
+                        fontSize: '15px',
+                        color: r.netOutstanding > 0 ? 'var(--teal)' : r.netOutstanding < 0 ? 'var(--danger)' : 'var(--text-2)',
+                        background: r.netOutstanding > 0 ? 'rgba(0,184,150,0.06)' : r.netOutstanding < 0 ? 'rgba(217,54,54,0.06)' : 'transparent'
+                      }}>
+                        {fmt(r.netOutstanding)}
+                        <div style={{ fontSize: '10px', fontWeight: '600', opacity: 0.75 }}>
+                          {r.netOutstanding > 0 ? 'net to pay' : r.netOutstanding < 0 ? 'net overpaid' : 'settled'}
+                        </div>
+                      </td>
+                      <td style={{ ...tdNum, width: '40px', color: 'var(--text-2)' }}></td>
+                    </tr>,
+
+                    /* ── month-wise drill-down row ── */
+                    isOpen && (
+                      <tr key={r.worker.id + '-months'}>
+                        <td colSpan="9" style={{ padding: '0', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+                          <div style={{ padding: '10px 16px 14px 40px', overflowX: 'auto' }}>
+                            {r.months.length === 0 ? (
+                              <div style={{ fontSize: '13px', color: 'var(--text-2)', padding: '8px 0' }}>
+                                No activity recorded for {year}.
+                              </div>
+                            ) : (
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', minWidth: '480px' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ ...thBase, textAlign: 'left', background: 'transparent', padding: '6px 10px' }}>Month</th>
+                                    <th style={{ ...thBase, background: 'transparent', padding: '6px 10px' }}>Days (Full / ½)</th>
+                                    <th style={{ ...thBase, background: 'transparent', padding: '6px 10px' }}>Earnings</th>
+                                    <th style={{ ...thBase, background: 'transparent', padding: '6px 10px' }}>Payments</th>
+                                    <th style={{ ...thBase, background: 'transparent', padding: '6px 10px' }}>Credit Deposits</th>
+                                    <th style={{ ...thBase, background: 'transparent', padding: '6px 10px', color: 'var(--teal)' }}>Month Balance</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {r.months.map(mm => (
+                                    <tr key={mm.monthStr} style={{ background: 'var(--card)' }}>
+                                      <td style={{ ...tdNum, textAlign: 'left', fontFamily: 'inherit', padding: '8px 10px', fontWeight: '600' }}>
+                                        {MONTH_SHORT[mm.month - 1]} {year}
+                                      </td>
+                                      <td style={{ ...tdNum, padding: '8px 10px', color: 'var(--text-2)' }}>
+                                        {mm.fullDays}{mm.halfDays > 0 ? ` + ½×${mm.halfDays}` : ''}
+                                      </td>
+                                      <td style={{ ...tdNum, padding: '8px 10px', color: 'var(--teal)' }}>{fmt(mm.E)}</td>
+                                      <td style={{ ...tdNum, padding: '8px 10px', color: 'var(--danger)' }}>{fmt(mm.P)}</td>
+                                      <td style={{ ...tdNum, padding: '8px 10px', color: '#0077b6' }}>{fmt(mm.D)}</td>
+                                      <td style={{
+                                        ...tdNum, padding: '8px 10px', fontWeight: '700',
+                                        color: (mm.E + mm.D - mm.P) > 0 ? 'var(--teal)' : (mm.E + mm.D - mm.P) < 0 ? 'var(--danger)' : 'var(--text-2)'
+                                      }}>
+                                        {fmt(mm.E + mm.D - mm.P)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  ];
+                })}
+              </tbody>
+
+            </table>
+          </div>
+
+          <div style={{ fontSize: '12px', marginTop: '12px', color: 'var(--text-2)', lineHeight: '1.5' }}>
+            Opening Balance is the balance as of January 1, carried forward from the worker's starting balance and all activity before {year}. Outstanding = Earnings + Credit Deposits − Payments for {year}. Net Outstanding = Opening Balance + Outstanding. Tap a worker row to see the month-wise breakdown.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FarmWageManager() {
   // Theme definitions — 3 Light, 3 Dark
   const themes = {
@@ -698,7 +1023,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.0.0';
+  const APP_VERSION = '5.0.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1634,7 +1959,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.0.0'
+      version: '5.0.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1918,7 +2243,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.0.0'
+        version: '5.0.1'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2197,7 +2522,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.0.0',
+        version:  '5.0.1',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2337,7 +2662,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.0.0'
+      version: '5.0.1'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -8529,128 +8854,15 @@ function FarmWageManager() {
               </button>
             </div>
 
-            {/* View 1: Worker Costs */}
-            <div style={{
-              background: 'var(--card)',
-              borderRadius: '16px',
-              padding: '24px',
-              marginBottom: '16px',
-              border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
-            }}>
-              <h3 style={{
-                margin: '0 0 20px 0',
-                fontSize: '20px',
-                fontWeight: '700',
-                color: 'var(--text-1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                Worker Costs
-              </h3>
+            {/* View 1: Worker Costs — detailed worker-wise table */}
+              <YearlyWorkerCostsReport
+                workers={workers}
+                attendance={attendance}
+                payments={payments}
+                year={yearlySummaryYear}
+              />
 
-              {(() => {
-                // Calculate worker costs for the year
-                const yearStart = `${yearlySummaryYear}-01`;
-                const yearEnd = `${yearlySummaryYear}-12`;
-                
-                let totalEarnings = 0;
-                let totalPayments = 0;
-                
-                // Calculate for each month of the year
-                for (let month = 1; month <= 12; month++) {
-                  const monthStr = `${yearlySummaryYear}-${String(month).padStart(2, '0')}`;
-                  
-                  // Calculate earnings for this month
-                  workers.forEach(worker => {
-                    const monthAttendance = attendance.filter(a => 
-                      a.workerId === worker.id && a.date.startsWith(monthStr)
-                    );
-                    const fullDays = monthAttendance.filter(a => a.status === 'present').length;
-                    const halfDays = monthAttendance.filter(a => a.status === 'half_day').length;
-                    const monthEarnings = (fullDays * worker.dailyWage) + (halfDays * worker.dailyWage * 0.5);
-                    totalEarnings += monthEarnings;
-                  });
-                  
-                  // Calculate payments for this month
-                  const monthPayments = payments.filter(p => 
-                    p.date.startsWith(monthStr) && p.type === 'payment'
-                  );
-                  totalPayments += monthPayments.reduce((sum, p) => sum + p.amount, 0);
-                }
-                
-                return (
-                  <>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, 1fr)',
-                      gap: '16px',
-                      marginBottom: '20px'
-                    }}>
-                      <div style={{
-                        padding: '20px',
-                        background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)',
-                        borderRadius: '12px',
-                        color: 'white'
-                      }}>
-                        <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
-                          Total Earnings
-                        </div>
-                        <div style={{ fontSize: '32px', fontWeight: '700' }}>
-                          ₹{Math.round(totalEarnings).toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
-                          Worker wages earned in {yearlySummaryYear}
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        padding: '20px',
-                        background: 'var(--navy)',
-                        borderRadius: '12px',
-                        color: 'white'
-                      }}>
-                        <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
-                          Total Payments
-                        </div>
-                        <div style={{ fontSize: '32px', fontWeight: '700' }}>
-                          ₹{Math.round(totalPayments).toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
-                          Paid to workers in {yearlySummaryYear}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div style={{
-                      padding: '16px',
-                      background: totalEarnings - totalPayments > 0 ? '#fff3cd' : '#d4edda',
-                      borderRadius: '12px',
-                      border: `2px solid ${totalEarnings - totalPayments > 0 ? '#f39c12' : '#0077b6'}`
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                        <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-1)' }}>
-                          {totalEarnings - totalPayments > 0 ? 'Outstanding Balance' : 'Overpaid Amount'}
-                        </div>
-                        <div style={{
-                          fontSize: '24px',
-                          fontWeight: '700',
-                          color: totalEarnings - totalPayments > 0 ? '#f39c12' : '#0077b6'
-                        }}>
-                          ₹{Math.abs(totalEarnings - totalPayments).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* View 2: Item Costs */}
+              {/* View 2: Item Costs */}
             <div style={{
               background: 'var(--card)',
               borderRadius: '16px',
@@ -9883,7 +10095,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.0.0
+              Version 5.0.1
             </p>
           </div>
         </div>
@@ -9908,11 +10120,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.0.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.0.0',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.0.0',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.0.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.0.0',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.0.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.0.1',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.0.1',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.0.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.0.1',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -9927,10 +10139,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.0.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.0.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
