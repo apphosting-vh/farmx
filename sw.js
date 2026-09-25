@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 5.0.2                                            ║
- * ║  Cache Key    : farm-manager-v5.0.2                              ║
+ * ║  Version      : 5.0.3                                            ║
+ * ║  Cache Key    : farm-manager-v5.0.3                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v5.0.2';
+const CACHE_VERSION = 'v5.0.3';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.

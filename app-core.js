@@ -45,6 +45,54 @@ const waitForInstalledWorker = (worker, timeoutMs = 15000) => new Promise(resolv
   worker.addEventListener('statechange', onStateChange);
 });
 
+const normalizeWageRevisions = (worker) => {
+  const hasRevisionArray = Array.isArray(worker?.wageRevisions);
+  const legacyWage = worker?.revisedWage;
+  const legacyStartDate = String(worker?.revisedWageStartDate || '').slice(0, 10);
+  const rawRevisions = hasRevisionArray
+    ? worker.wageRevisions
+    : (legacyWage !== '' && legacyWage !== null && legacyWage !== undefined && legacyStartDate
+        ? [{ wage: legacyWage, startDate: legacyStartDate }]
+        : []);
+
+  return rawRevisions
+    .map(revision => {
+      const rawWage = revision?.wage ?? revision?.revisedWage;
+      return {
+        wage: rawWage === '' || rawWage === null || rawWage === undefined ? NaN : Number(rawWage),
+        startDate: String(revision?.startDate ?? revision?.revisedWageStartDate ?? '').slice(0, 10)
+      };
+    })
+    .filter(revision => revision.startDate && Number.isFinite(revision.wage))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+};
+
+const getEffectiveDailyWage = (worker, date) => {
+  const baseWage = Number(worker?.dailyWage);
+  const safeBaseWage = Number.isFinite(baseWage) ? baseWage : 0;
+  const attendanceDate = String(date || '').slice(0, 10);
+
+  if (!attendanceDate) return safeBaseWage;
+
+  let effectiveWage = safeBaseWage;
+  let effectiveStartDate = '';
+  normalizeWageRevisions(worker).forEach(revision => {
+    if (attendanceDate >= revision.startDate &&
+        (!effectiveStartDate || revision.startDate >= effectiveStartDate)) {
+      effectiveWage = revision.wage;
+      effectiveStartDate = revision.startDate;
+    }
+  });
+
+  return effectiveWage;
+};
+
+const getAttendanceEarnings = (worker, records) => records.reduce((sum, record) => {
+  if (record.status === 'present') return sum + getEffectiveDailyWage(worker, record.date);
+  if (record.status === 'half_day') return sum + getEffectiveDailyWage(worker, record.date) * 0.5;
+  return sum;
+}, 0);
+
 // Debounce helper — batches rapid calls into a single execution after `delay` ms
 function _debounce(fn, delay) {
   let timer;
@@ -400,7 +448,7 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
 
         attendance.forEach(a => {
           if (a.workerId !== worker.id || !a.date || a.date >= yearStart) return;
-          const wage = Number(worker.dailyWage) || 0;
+          const wage = getEffectiveDailyWage(worker, a.date);
           if (a.status === 'present') openingBalance += wage;
           else if (a.status === 'half_day') openingBalance += wage * 0.5;
         });
@@ -421,7 +469,7 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
         );
         const fullDays  = mAtt.filter(a => a.status === 'present').length;
         const halfDays  = mAtt.filter(a => a.status === 'half_day').length;
-        const mE = (fullDays * worker.dailyWage) + (halfDays * worker.dailyWage * 0.5);
+        const mE = getAttendanceEarnings(worker, mAtt);
 
         const mP = payments
           .filter(p => p.workerId === worker.id && p.date.startsWith(monthStr) && p.type === 'payment')
@@ -852,6 +900,7 @@ function FarmWageManager() {
   const [newWorker, setNewWorker] = useState({ 
     name: '', 
     dailyWage: '', 
+    wageRevisions: [],
     phone: '', 
     openingBalance: '0',
     type: 'regular', // 'regular' or 'seasonal'
@@ -1067,7 +1116,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.0.2';
+  const APP_VERSION = '5.0.3';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1193,30 +1242,96 @@ function FarmWageManager() {
     window.location.reload();
   };
 
+  const addWageRevision = () => {
+    setNewWorker(current => ({
+      ...current,
+      wageRevisions: [...(current.wageRevisions || []), { wage: '', startDate: '' }]
+    }));
+  };
+
+  const updateWageRevision = (index, field, value) => {
+    setNewWorker(current => ({
+      ...current,
+      wageRevisions: (current.wageRevisions || []).map((revision, revisionIndex) =>
+        revisionIndex === index ? { ...revision, [field]: value } : revision
+      )
+    }));
+  };
+
+  const removeWageRevision = (index) => {
+    setNewWorker(current => ({
+      ...current,
+      wageRevisions: (current.wageRevisions || []).filter((_, revisionIndex) => revisionIndex !== index)
+    }));
+  };
+
+  const hasConfiguredWageRevision = (newWorker.wageRevisions || []).some(revision => {
+    const hasWage = revision?.wage !== '' && revision?.wage !== null && revision?.wage !== undefined;
+    const hasStartDate = revision?.startDate !== '' && revision?.startDate !== null && revision?.startDate !== undefined;
+    return hasWage && hasStartDate;
+  });
+
   // Add worker
   const addWorker = () => {
     if (!newWorker.name || !newWorker.dailyWage) return;
-    
+
+    const formRevisions = Array.isArray(newWorker.wageRevisions) ? newWorker.wageRevisions : [];
+    const wageRevisions = [];
+    const revisionDates = new Set();
+
+    for (let index = 0; index < formRevisions.length; index += 1) {
+      const revision = formRevisions[index] || {};
+      const hasWage = revision.wage !== '' && revision.wage !== null && revision.wage !== undefined;
+      const hasStartDate = revision.startDate !== '' && revision.startDate !== null && revision.startDate !== undefined;
+
+      if (!hasWage && !hasStartDate) continue;
+      if (hasWage !== hasStartDate) {
+        alert(`Revision ${index + 1}: enter both wage and start date, or leave both blank.`);
+        return;
+      }
+
+      const wage = Number(revision.wage);
+      if (!Number.isFinite(wage)) {
+        alert(`Revision ${index + 1}: enter a valid wage.`);
+        return;
+      }
+
+      const startDate = String(revision.startDate).slice(0, 10);
+      if (revisionDates.has(startDate)) {
+        alert('Each wage revision must have a different start date.');
+        return;
+      }
+
+      revisionDates.add(startDate);
+      wageRevisions.push({ wage, startDate });
+    }
+
+    wageRevisions.sort((a, b) => a.startDate.localeCompare(b.startDate));
+
     if (editingWorker) {
-      setWorkers(workers.map(w => 
-        w.id === editingWorker.id 
-          ? { 
-              ...w, 
-              ...newWorker, 
-              dailyWage: parseFloat(newWorker.dailyWage),
-              openingBalance: parseFloat(newWorker.openingBalance || 0),
-              type: newWorker.type || 'regular',
-              active: newWorker.active !== undefined ? newWorker.active : true,
-              createdAt: newWorker.createdAt ? new Date(newWorker.createdAt).toISOString() : w.createdAt
-            }
-          : w
-      ));
+      setWorkers(workers.map(w => {
+        if (w.id !== editingWorker.id) return w;
+        const workerData = { ...w };
+        delete workerData.revisedWage;
+        delete workerData.revisedWageStartDate;
+        return {
+          ...workerData,
+          ...newWorker,
+          dailyWage: parseFloat(newWorker.dailyWage),
+          wageRevisions,
+          openingBalance: parseFloat(newWorker.openingBalance || 0),
+          type: newWorker.type || 'regular',
+          active: newWorker.active !== undefined ? newWorker.active : true,
+          createdAt: newWorker.createdAt ? new Date(newWorker.createdAt).toISOString() : w.createdAt
+        };
+      }));
       setEditingWorker(null);
     } else {
       setWorkers([...workers, {
         id: Date.now(),
         ...newWorker,
         dailyWage: parseFloat(newWorker.dailyWage),
+        wageRevisions,
         openingBalance: parseFloat(newWorker.openingBalance || 0),
         type: newWorker.type || 'regular',
         active: true,
@@ -1227,6 +1342,7 @@ function FarmWageManager() {
     setNewWorker({ 
       name: '', 
       dailyWage: '', 
+      wageRevisions: [],
       phone: '', 
       openingBalance: '0', 
       type: 'regular', 
@@ -1758,7 +1874,7 @@ function FarmWageManager() {
     );
     const fullDays = monthAttendance.filter(a => a.status === 'present').length;
     const halfDays = monthAttendance.filter(a => a.status === 'half_day').length;
-    const E = (fullDays * worker.dailyWage) + (halfDays * worker.dailyWage * 0.5);
+    const E = getAttendanceEarnings(worker, monthAttendance);
 
     // P (Payments) - Amount paid to worker in the month
     const monthPayments = payments.filter(p =>
@@ -1841,12 +1957,7 @@ function FarmWageManager() {
     
     const totalPaid = monthAttendance.reduce((sum, a) => {
       const worker = workers.find(w => w.id === a.workerId);
-      if (a.status === 'present') {
-        return sum + (worker?.dailyWage || 0);
-      } else if (a.status === 'half_day') {
-        return sum + (worker?.dailyWage || 0) * 0.5;
-      }
-      return sum;
+      return sum + getAttendanceEarnings(worker, [a]);
     }, 0);
 
     return {
@@ -1854,7 +1965,7 @@ function FarmWageManager() {
       presentToday: todayAttendance.length,
       monthlyPaid: totalPaid,
       avgDailyWage: workers.length > 0 
-        ? workers.reduce((sum, w) => sum + w.dailyWage, 0) / workers.length 
+        ? workers.reduce((sum, w) => sum + getEffectiveDailyWage(w, today), 0) / workers.length 
         : 0
     };
   };
@@ -1880,7 +1991,7 @@ function FarmWageManager() {
     const totalDays = fullDays + (halfDays * 0.5);
     
     // E (Earnings) - Total wage earnings for the month
-    const E = (fullDays * (worker?.dailyWage || 0)) + (halfDays * (worker?.dailyWage || 0) * 0.5);
+    const E = getAttendanceEarnings(worker, workerAttendance);
     
     // O (Opening Balance) for this month
     const currentMonth = new Date(periodDate + '-01');
@@ -2014,7 +2125,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.0.2'
+      version: '5.0.3'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2035,6 +2146,10 @@ function FarmWageManager() {
     id:             w.id             ?? Date.now() + Math.random(),
     name:           w.name           ?? 'Unknown',
     dailyWage:      typeof w.dailyWage === 'number' ? w.dailyWage : parseFloat(w.dailyWage) || 0,
+    wageRevisions:  normalizeWageRevisions(w).map(revision => ({
+      wage: revision.wage,
+      startDate: revision.startDate
+    })),
     phone:          w.phone          ?? '',
     openingBalance: typeof w.openingBalance === 'number' ? w.openingBalance : parseFloat(w.openingBalance) || 0,
     type:           w.type           ?? 'regular',      // added in v2.0
@@ -2298,7 +2413,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.0.2'
+        version: '5.0.3'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2577,7 +2692,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.0.2',
+        version:  '5.0.3',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2717,7 +2832,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.0.2'
+      version: '5.0.3'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3253,7 +3368,7 @@ function FarmWageManager() {
       const totalDays = fullDays + (halfDays * 0.5);
       
       // E (Earnings) - Total wage earnings for the month
-      const E = (fullDays * worker.dailyWage) + (halfDays * worker.dailyWage * 0.5);
+      const E = getAttendanceEarnings(worker, monthAttendance);
       
       // O (Opening Balance)
       const O = getOpeningBalance(worker.id, month);
@@ -3569,15 +3684,20 @@ function FarmWageManager() {
                       <button
                         onClick={() => {
                           setEditingWorker(worker);
-                          setNewWorker({
-                            name: worker.name,
-                            dailyWage: worker.dailyWage.toString(),
-                            phone: worker.phone || '',
-                            openingBalance: (worker.openingBalance || 0).toString(),
-                            type: worker.type || 'regular',
-                            active: worker.active !== false,
-                            createdAt: worker.createdAt ? new Date(worker.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-                          });
+                           setNewWorker({
+                             name: worker.name,
+                              dailyWage: worker.dailyWage.toString(),
+                              wageRevisions: normalizeWageRevisions(worker).map(revision => ({
+                                wage: revision.wage.toString(),
+                                startDate: revision.startDate
+                              })),
+                              phone: worker.phone || '',
+                             openingBalance: (worker.openingBalance || 0).toString(),
+                             type: worker.type || 'regular',
+                             active: worker.active !== false,
+                             createdAt: worker.createdAt ? new Date(worker.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                           });
+
                           setShowAddWorker(true);
                         }}
                         style={{
@@ -4669,7 +4789,7 @@ function FarmWageManager() {
                 display: 'block',
                 fontSize: '14px',
                 fontWeight: '600',
-                color: 'var(--text-1)',
+                color: hasConfiguredWageRevision ? 'var(--label)' : 'var(--text-1)',
                 marginBottom: '8px'
               }}>
                 Daily Wage (₹) *
@@ -4677,7 +4797,10 @@ function FarmWageManager() {
               <input
                 type="number"
                 value={newWorker.dailyWage}
+                readOnly={hasConfiguredWageRevision}
+                aria-readonly={hasConfiguredWageRevision}
                 onChange={(e) => setNewWorker({ ...newWorker, dailyWage: e.target.value })}
+                title={hasConfiguredWageRevision ? 'Base wage is locked because wage revisions exist.' : ''}
                 placeholder="Enter daily wage"
                 style={{
                   width: '100%',
@@ -4686,9 +4809,164 @@ function FarmWageManager() {
                   borderRadius: '12px',
                   fontSize: '16px',
                   fontFamily: 'inherit',
-                  outline: 'none'
+                  outline: 'none',
+                  background: hasConfiguredWageRevision ? 'var(--surface)' : 'var(--card)',
+                  color: hasConfiguredWageRevision ? 'var(--label)' : 'var(--text-1)',
+                  opacity: hasConfiguredWageRevision ? 0.7 : 1,
+                  cursor: hasConfiguredWageRevision ? 'not-allowed' : 'text'
                 }}
               />
+              {hasConfiguredWageRevision && (
+                <p style={{
+                  margin: '8px 0 0 0',
+                  fontSize: '12px',
+                  color: 'var(--label)',
+                  lineHeight: '1.4'
+                }}>
+                  Base wage is locked while wage revisions exist. Remove all revisions to edit it.
+                </p>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+                <label style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: 'var(--text-1)'
+                }}>
+                  Wage Revision History
+                </label>
+                <button
+                  type="button"
+                  onClick={addWageRevision}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 10px',
+                    border: '1px solid rgba(0,119,182,0.25)',
+                    background: 'rgba(0,119,182,0.08)',
+                    color: '#0077b6',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span style={{ width: '14px', height: '14px', display: 'inline-flex' }}>{Icons.plus}</span>
+                  Add Revision
+                </button>
+              </div>
+
+              {(newWorker.wageRevisions || []).length === 0 ? (
+                <p style={{
+                  margin: '0',
+                  padding: '12px',
+                  background: 'var(--surface)',
+                  border: '1px dashed var(--border)',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  color: 'var(--label)',
+                  lineHeight: '1.4'
+                }}>
+                  No revisions. The original daily wage applies until a revision start date.
+                </p>
+              ) : (
+                (newWorker.wageRevisions || []).map((revision, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '12px',
+                      marginBottom: '8px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-1)' }}>
+                        Revision {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeWageRevision(index)}
+                        aria-label={`Remove wage revision ${index + 1}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '28px',
+                          height: '28px',
+                          padding: '0',
+                          border: '1px solid rgba(220,38,38,0.2)',
+                          background: 'rgba(220,38,38,0.08)',
+                          color: 'var(--danger)',
+                          borderRadius: '7px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <span style={{ width: '14px', height: '14px', display: 'inline-flex' }}>{Icons.trash}</span>
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: 'var(--text-1)',
+                          marginBottom: '5px'
+                        }}>
+                          Revised Wage (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={revision.wage ?? ''}
+                          onChange={(e) => updateWageRevision(index, 'wage', e.target.value)}
+                          placeholder="e.g. 150"
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '2px solid var(--border)',
+                            borderRadius: '10px',
+                            fontSize: '14px',
+                            fontFamily: 'inherit',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          color: 'var(--text-1)',
+                          marginBottom: '5px'
+                        }}>
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={revision.startDate || ''}
+                          onChange={(e) => updateWageRevision(index, 'startDate', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '2px solid var(--border)',
+                            borderRadius: '10px',
+                            fontSize: '14px',
+                            fontFamily: 'inherit',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div style={{ marginBottom: '24px' }}>
@@ -4881,7 +5159,7 @@ function FarmWageManager() {
                 onClick={() => {
                   setShowAddWorker(false);
                   setEditingWorker(null);
-                  setNewWorker({ name: '', dailyWage: '', phone: '', openingBalance: '0', type: 'regular', active: true });
+                  setNewWorker({ name: '', dailyWage: '', wageRevisions: [], phone: '', openingBalance: '0', type: 'regular', active: true, createdAt: new Date().toISOString().split('T')[0] });
                 }}
                 style={{
                   flex: 1,
@@ -10150,7 +10428,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.0.2
+              Version 5.0.3
             </p>
           </div>
         </div>
@@ -10175,11 +10453,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.0.2',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.0.2',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.0.2',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.0.2',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.0.2',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.0.3',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.0.3',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.0.3',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.0.3',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.0.3',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10194,10 +10472,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.0.2',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.2',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.2',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.2',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.0.3',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.3',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.3',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.3',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
