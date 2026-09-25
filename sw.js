@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 5.0.0                                            ║
- * ║  Cache Key    : farm-manager-v5.0.0                              ║
+ * ║  Version      : 5.0.2                                            ║
+ * ║  Cache Key    : farm-manager-v5.0.2                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v5.1.0'; // bumped: Total Project Cost = Item + Labor auto-sum; v5.0.0
+const CACHE_VERSION = 'v5.0.2';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
@@ -123,6 +123,13 @@ function isAppShell(url) {
     (url.pathname === `${APP_PATH}/` ||
      url.pathname === `${APP_PATH}/index.html` ||
      url.pathname.endsWith('/'))
+  );
+}
+
+function isAppCore(url) {
+  return (
+    url.hostname === APP_ORIGIN &&
+    url.pathname === `${APP_PATH}/app-core.js`
   );
 }
 
@@ -617,6 +624,11 @@ self.addEventListener('fetch', event => {
   // back to the cached shell so the app feels responsive on any connection.
   if (isAppShell(url)) {
     event.respondWith(navigationPreloadFirst(event, SHELL_CACHE));
+    return;
+  }
+
+  if (isAppCore(url)) {
+    event.respondWith(networkFirstWithTimeout(request, SHELL_CACHE, SHELL_NETWORK_TIMEOUT_MS));
     return;
   }
 

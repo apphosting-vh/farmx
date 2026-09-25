@@ -1,6 +1,50 @@
 // Farm Manager - Browser-Compatible Version
 const { useState, useEffect, useMemo, useCallback } = React;
 
+const isNewerVersion = (candidate, current) => {
+  const candidateParts = candidate.split('.').map(Number);
+  const currentParts = current.split('.').map(Number);
+  if (candidateParts.some(part => !Number.isFinite(part)) || currentParts.some(part => !Number.isFinite(part))) return false;
+
+  const length = Math.max(candidateParts.length, currentParts.length);
+  for (let i = 0; i < length; i += 1) {
+    const candidatePart = candidateParts[i] || 0;
+    const currentPart = currentParts[i] || 0;
+    if (candidatePart !== currentPart) return candidatePart > currentPart;
+  }
+  return false;
+};
+
+const waitForInstalledWorker = (worker, timeoutMs = 15000) => new Promise(resolve => {
+  if (!worker) {
+    resolve(null);
+    return;
+  }
+  if (worker.state === 'installed') {
+    resolve(worker);
+    return;
+  }
+
+  let timer;
+  const onStateChange = () => {
+    if (worker.state === 'installed') {
+      clearTimeout(timer);
+      worker.removeEventListener('statechange', onStateChange);
+      resolve(worker);
+    } else if (worker.state === 'redundant') {
+      clearTimeout(timer);
+      worker.removeEventListener('statechange', onStateChange);
+      resolve(null);
+    }
+  };
+
+  timer = setTimeout(() => {
+    worker.removeEventListener('statechange', onStateChange);
+    resolve(null);
+  }, timeoutMs);
+  worker.addEventListener('statechange', onStateChange);
+});
+
 // Debounce helper — batches rapid calls into a single execution after `delay` ms
 function _debounce(fn, delay) {
   let timer;
@@ -1023,7 +1067,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.0.1';
+  const APP_VERSION = '5.0.2';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1031,6 +1075,8 @@ function FarmWageManager() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     let refreshing = false;
+    let swUpdateInterval = null;
+    let versionInterval = null;
 
     // ── 1. Reload automatically after the new SW has taken control ──
     navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -1068,8 +1114,7 @@ function FarmWageManager() {
       watchRegistration(reg);
       // Immediate check + periodic re-check every 30 minutes
       reg.update().catch(() => {});
-      const timer = setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
-      return () => clearInterval(timer);
+      swUpdateInterval = setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
     });
 
     // ── 4. Fallback: poll the live page for a version string change ──
@@ -1082,7 +1127,7 @@ function FarmWageManager() {
         const text = await res.text();
         // Pull the version out of the comment block at the top of the HTML
         const match = text.match(/Version\s*:\s*([\d.]+)/);
-        if (match && match[1] !== APP_VERSION) {
+        if (match && isNewerVersion(match[1], APP_VERSION)) {
           setUpdateAvailable(true);
         }
       } catch (e) { /* network error — skip silently */ }
@@ -1090,8 +1135,7 @@ function FarmWageManager() {
     // First poll after 10 s (page has settled), then every 30 min
     const versionTimer = setTimeout(() => {
       checkVersion();
-      const interval = setInterval(checkVersion, 30 * 60 * 1000);
-      return () => clearInterval(interval);
+      versionInterval = setInterval(checkVersion, 30 * 60 * 1000);
     }, 10000);
 
     // ── 5. Also listen for the custom event fired by the inline SW script ──
@@ -1123,19 +1167,30 @@ function FarmWageManager() {
 
     return () => {
       clearTimeout(versionTimer);
+      clearInterval(versionInterval);
+      clearInterval(swUpdateInterval);
       window.removeEventListener('swUpdateReady', onSwUpdateReady);
       navigator.serviceWorker.removeEventListener('message', onSwMessage);
     };
   }, []);
 
   // Trigger the SW to activate immediately, then the controllerchange listener reloads
-  const handleAppUpdate = () => {
-    if (swReg && swReg.waiting) {
-      swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
-    } else {
-      // Fallback: hard reload bypassing cache
-      window.location.reload(true);
+  const handleAppUpdate = async () => {
+    if ('serviceWorker' in navigator) {
+      try {
+        const registration = swReg || await navigator.serviceWorker.getRegistration();
+        if (registration) await registration.update().catch(() => {});
+        let worker = registration && registration.waiting;
+        if (!worker && registration && registration.installing) {
+          worker = await waitForInstalledWorker(registration.installing);
+        }
+        if (worker) {
+          worker.postMessage({ type: 'SKIP_WAITING' });
+          return;
+        }
+      } catch (e) {}
     }
+    window.location.reload();
   };
 
   // Add worker
@@ -1959,7 +2014,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.0.1'
+      version: '5.0.2'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2243,7 +2298,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.0.1'
+        version: '5.0.2'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2522,7 +2577,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.0.1',
+        version:  '5.0.2',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2662,7 +2717,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.0.1'
+      version: '5.0.2'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -10095,7 +10150,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.0.1
+              Version 5.0.2
             </p>
           </div>
         </div>
@@ -10120,11 +10175,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.0.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.0.1',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.0.1',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.0.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.0.1',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.0.2',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.0.2',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.0.2',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.0.2',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.0.2',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10139,10 +10194,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.0.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.0.2',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.2',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.2',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.2',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
