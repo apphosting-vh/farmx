@@ -695,6 +695,222 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
   );
 }
 
+// ── YearlySnapshotReport ──────────────────────────────────────────────────────
+// One-screen "where did the money go" snapshot for a single calendar year.
+// Four cost heads, all on a comparable basis:
+//   1. Worker Earnings — attendance wages, same basis as YearlyWorkerCostsReport (E)
+//   2. Item Costs      — Expenses tab, one row per purchase (cost field)
+//   3. Contract Costs  — Project Works tab, one row per work (contractCost field)
+//   4. Seasonal Costs  — Seasonal Work tab, rate × totalConsumed per work
+// Grand Total = sum of the four heads. Percentages are each head's share of that
+// total. Attendance uses every worker (not just active ones) so the snapshot
+// reconciles with the Worker Costs table below it.
+function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, seasonalWorks, year }) {
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Year is read from the leading YYYY of the stored date string rather than via
+  // new Date(...).getFullYear(). The latter parses bare 'YYYY-MM-DD' as UTC, which
+  // rolls back a year for anyone west of UTC on 1 January.
+  const yearOf = (dateStr) => {
+    const y = parseInt(String(dateStr || '').slice(0, 4), 10);
+    return Number.isFinite(y) ? y : null;
+  };
+
+  const data = React.useMemo(() => {
+    // 1. Worker earnings — every present / half_day record in the year.
+    let workerTotal = 0;
+    let workerCount = 0;
+    let workerDays = 0;
+    (workers || []).forEach(worker => {
+      const yAtt = (attendance || []).filter(a => a.workerId === worker.id && yearOf(a.date) === year);
+      const earned = getAttendanceEarnings(worker, yAtt);
+      if (earned !== 0) workerCount++;
+      workerTotal += earned;
+      workerDays += yAtt.filter(a => a.status === 'present').length
+                   + yAtt.filter(a => a.status === 'half_day').length * 0.5;
+    });
+
+    // 2. Item costs — expenses are dated by purchaseDate.
+    const yearExpenses = (expenses || []).filter(e => yearOf(e.purchaseDate) === year);
+    const itemTotal = yearExpenses.reduce((s, e) => s + (Number(e.cost) || 0), 0);
+
+    // 3. Contract costs — project works are dated by `date`. contractCost is the
+    //    agreed contract value, so it is used as-is: totalItemCost / totalLaborCost
+    //    are its components and would double-count if added on top.
+    const yearContracts = (contractWorks || []).filter(cw => yearOf(cw.date) === year);
+    const contractTotal = yearContracts.reduce((s, cw) => s + (Number(cw.contractCost) || 0), 0);
+    const contractPaid = yearContracts.reduce((s, cw) => s + (Number(cw.paymentDone) || 0), 0);
+
+    // 4. Seasonal costs — rate × consumption, matching the Seasonal Work report.
+    const yearSeasonal = (seasonalWorks || []).filter(sw => yearOf(sw.startDate) === year);
+    const seasonalTotal = yearSeasonal.reduce(
+      (s, sw) => s + ((Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)), 0
+    );
+
+    const grandTotal = workerTotal + itemTotal + contractTotal + seasonalTotal;
+
+    const heads = [
+      {
+        key: 'worker',
+        label: 'Worker Earnings',
+        blurb: 'Attendance wages',
+        amount: workerTotal,
+        icon: 'workers',
+        color: '#0ea5e9',
+        detail: `${workerCount} worker${workerCount === 1 ? '' : 's'} · ${workerDays} day${workerDays === 1 ? '' : 's'}`,
+      },
+      {
+        key: 'item',
+        label: 'Item Costs',
+        blurb: 'From Expenses',
+        amount: itemTotal,
+        icon: 'expenses',
+        color: '#e74c3c',
+        detail: `${yearExpenses.length} purchase${yearExpenses.length === 1 ? '' : 's'}`,
+      },
+      {
+        key: 'contract',
+        label: 'Contract Costs',
+        blurb: 'From Project Works',
+        amount: contractTotal,
+        icon: 'contract',
+        color: '#7c3aed',
+        detail: contractTotal > 0
+          ? `${yearContracts.length} project${yearContracts.length === 1 ? '' : 's'} · ₹${Math.round(contractPaid).toLocaleString('en-IN')} paid`
+          : `${yearContracts.length} project${yearContracts.length === 1 ? '' : 's'}`,
+      },
+      {
+        key: 'seasonal',
+        label: 'Seasonal Costs',
+        blurb: 'From Seasonal Works',
+        amount: seasonalTotal,
+        icon: 'seasonal',
+        color: '#f39c12',
+        detail: `${yearSeasonal.length} work${yearSeasonal.length === 1 ? '' : 's'}`,
+      },
+    ].map(h => ({
+      ...h,
+      pct: grandTotal > 0 ? (h.amount / grandTotal) * 100 : 0,
+    }));
+
+    return { grandTotal, heads, hasAny: grandTotal > 0 };
+  }, [workers, attendance, expenses, contractWorks, seasonalWorks, year]);
+
+  const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
+
+  // "so far" wording only makes sense for the year in progress
+  const isCurrentYear = year === new Date().getFullYear();
+  const now = new Date();
+  const periodLabel = isCurrentYear
+    ? `Jan – ${MONTH_SHORT[now.getMonth()]} ${year}`
+    : `Jan – Dec ${year}`;
+
+  return (
+    <div style={{
+      background: 'var(--card)',
+      borderRadius: '16px',
+      padding: '18px',
+      border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+    }}>
+      {/* Grand total banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--navy) 0%, #0b2447 100%)',
+        borderRadius: '14px',
+        padding: '18px',
+        color: 'white',
+        marginBottom: '14px'
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          fontSize: '11px', fontWeight: '700', letterSpacing: '0.08em',
+          textTransform: 'uppercase', opacity: 0.75, marginBottom: '8px'
+        }}>
+          <span style={{ display: 'inline-flex', width: '14px', height: '14px' }}>{Icons.reports}</span>
+          Total Spend {isCurrentYear ? 'So Far' : 'This Year'}
+        </div>
+        <div style={{ fontSize: '32px', fontWeight: '700', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+          {fmt(data.grandTotal)}
+        </div>
+        <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
+          {periodLabel} · across 4 cost heads
+        </div>
+      </div>
+
+      {!data.hasAny ? (
+        <div style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--text-2)' }}>
+          <div style={{ width: '40px', height: '40px', margin: '0 auto 12px', color: 'var(--teal)', opacity: 0.4 }}>{Icons.trending}</div>
+          <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '4px' }}>
+            Nothing recorded for {year}
+          </div>
+          <div style={{ fontSize: '13px' }}>
+            Worker earnings, expenses, project works and seasonal works will appear here.
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Per-head cards with share-of-total bars */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '10px'
+          }}>
+            {data.heads.map(head => (
+              <div key={head.key} style={{
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid var(--border)',
+                background: 'var(--surface)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{
+                    display: 'inline-flex', width: '15px', height: '15px',
+                    color: head.color, flexShrink: 0
+                  }}>{Icons[head.icon]}</span>
+                  <span style={{
+                    fontSize: '12px', fontWeight: '700', color: 'var(--text-1)',
+                    minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {head.label}
+                  </span>
+                </div>
+
+                <div style={{
+                  fontSize: '18px', fontWeight: '700', color: head.color,
+                  fontFamily: "'DM Mono', monospace", lineHeight: 1.2,
+                  marginBottom: '6px'
+                }}>
+                  {fmt(head.amount)}
+                </div>
+
+                {/* Share of grand total */}
+                <div style={{ height: '5px', borderRadius: '3px', background: 'var(--border)', overflow: 'hidden', marginBottom: '6px' }}>
+                  <div style={{ width: `${head.pct}%`, height: '100%', background: head.color, borderRadius: '3px' }} />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-2)' }}>
+                    {head.pct.toFixed(1)}%
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-3)', fontWeight: '500' }}>
+                    {head.blurb}
+                  </span>
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '2px' }}>
+                  {head.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: '12px', marginTop: '14px', color: 'var(--text-2)', lineHeight: '1.5' }}>
+            Worker Earnings counts present and half-day attendance at each worker's effective wage (incl. revisions). Item Costs uses the cost of each expense. Contract Costs use the agreed contract value, not the amount already paid. Seasonal Costs use rate × consumption. Percentages are each head's share of the total spend.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FarmWageManager() {
   // Theme definitions — 3 Light, 3 Dark
   const themes = {
@@ -8266,6 +8482,22 @@ function FarmWageManager() {
               >
                 Seasonal Work
               </button>
+              <button
+                onClick={() => setReportType('snapshot')}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  border: reportType === 'snapshot' ? '2px solid var(--navy)' : '2px solid var(--border)',
+                  background: reportType === 'snapshot' ? '#e2e8f0' : 'white',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: reportType === 'snapshot' ? 'var(--navy)' : '#7f8c8d',
+                  cursor: 'pointer'
+                }}
+              >
+                Yearly Snapshot
+              </button>
             </div>
           </div>
 
@@ -8593,9 +8825,9 @@ function FarmWageManager() {
             </>
           )}
             </>
-          ) : (
-            /* Seasonal Reports - Yearly View */
+          ) : reportType === 'seasonal' ? (
             <>
+              {/* Seasonal Reports - Yearly View */}
               {/* Year Navigation */}
               <div style={{
                 background: 'var(--card)',
@@ -9002,202 +9234,274 @@ function FarmWageManager() {
                 </div>
               )}
             </>
-          )}
-
-          {/* Yearly Summary Report */}
-          <div style={{ marginTop: '24px' }}>
-            <h2 style={{
-              margin: '0 0 20px 0',
-              fontSize: '24px',
-              fontWeight: '700',
-              color: 'var(--text-1)'
-            }}>
-              <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><span style={{width:'18px',height:'18px',display:'inline-flex'}}>{Icons.reports}</span>Yearly Summary</span>
-            </h2>
-
-            {/* Year Navigation */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '20px',
-              marginBottom: '24px',
-              background: 'var(--card)',
-              padding: '16px',
-              borderRadius: '12px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-            }}>
-              <button
-                onClick={() => setYearlySummaryYear(yearlySummaryYear - 1)}
-                style={{
-                  padding: '8px 16px',
-                  background: 'var(--navy)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <div style={{width:"16px",height:"16px"}}>{Icons.chevronLeft}</div>
-                Previous Year
-              </button>
+          ) : (
+            /* Yearly Snapshot - combined spend summary across all 4 cost heads */
+            <>
+              {/* Year Navigation — shares yearlySummaryYear with the Yearly Summary below */}
               <div style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: 'var(--text-1)',
-                minWidth: '100px',
-                textAlign: 'center'
+                background: 'var(--card)',
+                borderRadius: '16px',
+                padding: '14px',
+                marginBottom: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
               }}>
-                {yearlySummaryYear}
+                <button
+                  onClick={() => setYearlySummaryYear(yearlySummaryYear - 1)}
+                  style={{
+                    background: 'var(--navy)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '9px 14px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <div style={{ width: '14px', height: '14px' }}>{Icons.chevronLeft}</div>
+                  Prev
+                </button>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
+                    {yearlySummaryYear}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-3)' }}>
+                    Yearly Snapshot
+                  </div>
+                </div>
+                <button
+                  onClick={() => setYearlySummaryYear(yearlySummaryYear + 1)}
+                  disabled={yearlySummaryYear >= new Date().getFullYear()}
+                  style={{
+                    background: yearlySummaryYear >= new Date().getFullYear() ? 'var(--border)' : 'var(--navy)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '9px 14px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: yearlySummaryYear >= new Date().getFullYear() ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  Next
+                  <div style={{ width: '14px', height: '14px' }}>{Icons.chevronRight}</div>
+                </button>
               </div>
-              <button
-                onClick={() => setYearlySummaryYear(yearlySummaryYear + 1)}
-                disabled={yearlySummaryYear >= new Date().getFullYear()}
-                style={{
-                  padding: '8px 16px',
-                  background: yearlySummaryYear >= new Date().getFullYear()
-                    ? '#bdc3c7'
-                    : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: yearlySummaryYear >= new Date().getFullYear() ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                Next Year
-                <div style={{width:"16px",height:"16px"}}>{Icons.chevronRight}</div>
-              </button>
-            </div>
 
-            {/* View 1: Worker Costs — detailed worker-wise table */}
-              <YearlyWorkerCostsReport
+              <YearlySnapshotReport
                 workers={workers}
                 attendance={attendance}
-                payments={payments}
+                expenses={expenses}
+                contractWorks={contractWorks}
+                seasonalWorks={seasonalWorks}
                 year={yearlySummaryYear}
               />
 
-              {/* View 2: Item Costs */}
-            <div style={{
-              background: 'var(--card)',
-              borderRadius: '16px',
-              padding: '24px',
-              border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
-            }}>
-              <h3 style={{
-                margin: '0 0 20px 0',
-                fontSize: '20px',
-                fontWeight: '700',
-                color: 'var(--text-1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                Item Costs
-              </h3>
+              {/* Yearly Summary Report */}
+              <div style={{ marginTop: '24px' }}>
+                <h2 style={{
+                  margin: '0 0 20px 0',
+                  fontSize: '24px',
+                  fontWeight: '700',
+                  color: 'var(--text-1)'
+                }}>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><span style={{width:'18px',height:'18px',display:'inline-flex'}}>{Icons.reports}</span>Yearly Summary</span>
+                </h2>
 
-              {(() => {
-                // Calculate item costs for the year
-                const yearExpenses = expenses.filter(e => {
-                  const expenseYear = new Date(e.purchaseDate).getFullYear();
-                  return expenseYear === yearlySummaryYear;
-                });
-                
-                const totalExpenses = yearExpenses.reduce((sum, e) => sum + e.cost, 0);
-                
-                // Group by item title
-                const expensesByItem = {};
-                yearExpenses.forEach(expense => {
-                  if (!expensesByItem[expense.title]) {
-                    expensesByItem[expense.title] = {
-                      totalCost: 0,
-                      count: 0,
-                      totalQuantity: 0,
-                      unit: expense.unit
-                    };
-                  }
-                  expensesByItem[expense.title].totalCost += expense.cost;
-                  expensesByItem[expense.title].count += 1;
-                  expensesByItem[expense.title].totalQuantity += expense.quantity;
-                });
-                
-                return (
-                  <>
-                    <div style={{
-                      padding: '20px',
-                      background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
-                      borderRadius: '12px',
+                {/* Year Navigation */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '20px',
+                  marginBottom: '24px',
+                  background: 'var(--card)',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                }}>
+                  <button
+                    onClick={() => setYearlySummaryYear(yearlySummaryYear - 1)}
+                    style={{
+                      padding: '8px 16px',
+                      background: 'var(--navy)',
                       color: 'white',
-                      marginBottom: '20px'
-                    }}>
-                      <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
-                        Total Expenses
-                      </div>
-                      <div style={{ fontSize: '32px', fontWeight: '700' }}>
-                        ₹{Math.round(totalExpenses).toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
-                        {yearExpenses.length} purchases in {yearlySummaryYear}
-                      </div>
-                    </div>
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <div style={{width:"16px",height:"16px"}}>{Icons.chevronLeft}</div>
+                    Previous Year
+                  </button>
+                  <div style={{
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    color: 'var(--text-1)',
+                    minWidth: '100px',
+                    textAlign: 'center'
+                  }}>
+                    {yearlySummaryYear}
+                  </div>
+                  <button
+                    onClick={() => setYearlySummaryYear(yearlySummaryYear + 1)}
+                    disabled={yearlySummaryYear >= new Date().getFullYear()}
+                    style={{
+                      padding: '8px 16px',
+                      background: yearlySummaryYear >= new Date().getFullYear()
+                        ? '#bdc3c7'
+                        : 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: yearlySummaryYear >= new Date().getFullYear() ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    Next Year
+                    <div style={{width:"16px",height:"16px"}}>{Icons.chevronRight}</div>
+                  </button>
+                </div>
 
-                    {Object.keys(expensesByItem).length === 0 ? (
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '40px 20px',
-                        color: 'var(--label)'
-                      }}>
-                        <div style={{ fontSize: '48px', marginBottom: '12px' }}>📦</div>
-                        <div style={{ fontSize: '16px', fontWeight: '600' }}>No Expenses</div>
-                        <div style={{ fontSize: '14px' }}>No items purchased in {yearlySummaryYear}</div>
-                      </div>
-                    ) : (
-                      <div className="fm-list">
-                        {Object.entries(expensesByItem)
-                          .sort((a, b) => b[1].totalCost - a[1].totalCost)
-                          .map(([itemName, data]) => (
-                          <div key={itemName} style={{
-                            padding: '16px',
-                            background: 'var(--surface)',
-                            borderRadius: '12px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div>
-                              <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '4px' }}>
-                                {itemName}
-                              </div>
-                              <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-                                {data.totalQuantity} {data.unit} • {data.count} purchase{data.count > 1 ? 's' : ''}
-                              </div>
-                            </div>
-                            <div style={{
-                              fontSize: '20px',
-                              fontWeight: '700',
-                              color: 'var(--danger)'
-                            }}>
-                              ₹{Math.round(data.totalCost).toLocaleString()}
-                            </div>
+                {/* View 1: Worker Costs — detailed worker-wise table */}
+                <YearlyWorkerCostsReport
+                  workers={workers}
+                  attendance={attendance}
+                  payments={payments}
+                  year={yearlySummaryYear}
+                />
+
+                {/* View 2: Item Costs */}
+                <div style={{
+                  background: 'var(--card)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+                }}>
+                  <h3 style={{
+                    margin: '0 0 20px 0',
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: 'var(--text-1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    Item Costs
+                  </h3>
+
+                  {(() => {
+                    // Calculate item costs for the year
+                    const yearExpenses = expenses.filter(e => {
+                      const expenseYear = new Date(e.purchaseDate).getFullYear();
+                      return expenseYear === yearlySummaryYear;
+                    });
+
+                    const totalExpenses = yearExpenses.reduce((sum, e) => sum + e.cost, 0);
+
+                    // Group by item title
+                    const expensesByItem = {};
+                    yearExpenses.forEach(expense => {
+                      if (!expensesByItem[expense.title]) {
+                        expensesByItem[expense.title] = {
+                          totalCost: 0,
+                          count: 0,
+                          totalQuantity: 0,
+                          unit: expense.unit
+                        };
+                      }
+                      expensesByItem[expense.title].totalCost += expense.cost;
+                      expensesByItem[expense.title].count += 1;
+                      expensesByItem[expense.title].totalQuantity += expense.quantity;
+                    });
+
+                    return (
+                      <>
+                        <div style={{
+                          padding: '20px',
+                          background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+                          borderRadius: '12px',
+                          color: 'white',
+                          marginBottom: '20px'
+                        }}>
+                          <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
+                            Total Expenses
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
+                          <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                            ₹{Math.round(totalExpenses).toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
+                            {yearExpenses.length} purchases in {yearlySummaryYear}
+                          </div>
+                        </div>
+
+                        {Object.keys(expensesByItem).length === 0 ? (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '40px 20px',
+                            color: 'var(--label)'
+                          }}>
+                            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📦</div>
+                            <div style={{ fontSize: '16px', fontWeight: '600' }}>No Expenses</div>
+                            <div style={{ fontSize: '14px' }}>No items purchased in {yearlySummaryYear}</div>
+                          </div>
+                        ) : (
+                          <div className="fm-list">
+                            {Object.entries(expensesByItem)
+                              .sort((a, b) => b[1].totalCost - a[1].totalCost)
+                              .map(([itemName, data]) => (
+                              <div key={itemName} style={{
+                                padding: '16px',
+                                background: 'var(--surface)',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '4px' }}>
+                                    {itemName}
+                                  </div>
+                                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
+                                    {data.totalQuantity} {data.unit} • {data.count} purchase{data.count > 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  fontSize: '20px',
+                                  fontWeight: '700',
+                                  color: 'var(--danger)'
+                                }}>
+                                  ₹{Math.round(data.totalCost).toLocaleString()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
