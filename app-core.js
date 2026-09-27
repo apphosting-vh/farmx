@@ -496,15 +496,6 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
   // Only surface workers who actually had activity in this year.
   const activeRows = rows.filter(r => r.E !== 0 || r.P !== 0 || r.D !== 0 || r.openingBalance !== 0);
 
-  const totals = {
-    E: activeRows.reduce((s, r) => s + r.E, 0),
-    P: activeRows.reduce((s, r) => s + r.P, 0),
-    D: activeRows.reduce((s, r) => s + r.D, 0),
-    openingBalance: activeRows.reduce((s, r) => s + r.openingBalance, 0),
-  };
-  totals.outstanding = totals.E + totals.D - totals.P;
-  totals.netOutstanding = totals.openingBalance + totals.outstanding;
-
   const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
 
   const thBase = {
@@ -558,32 +549,6 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
         </div>
       ) : (
         <>
-          {/* ── Year totals strip ── */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: totals.D > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
-            gap: '12px',
-            marginBottom: '20px'
-          }}>
-            <div style={{ padding: '16px', background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', borderRadius: '12px', color: 'white' }}>
-              <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Earnings (E)</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.E)}</div>
-              <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Wages earned in {year}</div>
-            </div>
-            <div style={{ padding: '16px', background: 'var(--navy)', borderRadius: '12px', color: 'white' }}>
-              <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Payments (P)</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.P)}</div>
-              <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Paid to workers in {year}</div>
-            </div>
-            {totals.D > 0 && (
-              <div style={{ padding: '16px', background: '#0077b6', borderRadius: '12px', color: 'white' }}>
-                <div style={{ fontSize: '12px', marginBottom: '6px', fontWeight: '600', opacity: 0.9 }}>Total Credit Deposits (D)</div>
-                <div style={{ fontSize: '24px', fontWeight: '700' }}>{fmt(totals.D)}</div>
-                <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.85 }}>Credit extended in {year}</div>
-              </div>
-            )}
-          </div>
-
           {/* ── Expand / collapse all ── */}
           {activeRows.length > 1 && (
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '10px' }}>
@@ -910,6 +875,16 @@ function FarmWageManager() {
   const [attendanceView, setAttendanceView] = useState('monthly'); // Only monthly now
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [reportMonth, setReportMonth] = useState(new Date());
+  // Worker ids whose month transaction list is expanded in the Regular Work report
+  const [expandedReportTxns, setExpandedReportTxns] = useState(() => new Set());
+
+  const toggleReportTxns = useCallback((workerId) => {
+    setExpandedReportTxns(prev => {
+      const next = new Set(prev);
+      next.has(workerId) ? next.delete(workerId) : next.add(workerId);
+      return next;
+    });
+  }, []);
   const [reportType, setReportType] = useState('regular'); // 'regular' or 'seasonal'
   const [seasonalReportYear, setSeasonalReportYear] = useState(new Date().getFullYear());
   const [yearlySummaryYear, setYearlySummaryYear] = useState(new Date().getFullYear());
@@ -1116,7 +1091,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.0.3';
+  const APP_VERSION = '5.1.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -2125,7 +2100,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.0.3'
+      version: '5.1.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2413,7 +2388,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.0.3'
+        version: '5.1.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2692,7 +2667,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.0.3',
+        version:  '5.1.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -2832,7 +2807,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.0.3'
+      version: '5.1.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3351,11 +3326,11 @@ function FarmWageManager() {
   };
 
   // Get report data for a specific month
-  const getMonthReport = (month, workerType = null) => {
+  // Worker type (regular/seasonal) is purely indicational, so every active
+  // worker is included regardless of type.
+  const getMonthReport = (month) => {
     const monthStr = formatLocalMonth(month);
-    const filteredWorkers = workerType 
-      ? workers.filter(w => w.type === workerType && w.active !== false)
-      : workers.filter(w => w.active !== false);
+    const filteredWorkers = workers.filter(w => w.active !== false);
     
     return filteredWorkers.map(worker => {
       const monthAttendance = attendance.filter(a => 
@@ -8343,11 +8318,11 @@ function FarmWageManager() {
             </button>
           </div>
 
-          {workers.filter(w => (w.type === 'regular' || !w.type) && w.active !== false).length === 0 ? (
+          {workers.filter(w => w.active !== false).length === 0 ? (
             <div className="fm-empty">
               <div style={{width:'52px',height:'52px',margin:'0 auto 16px',color:'var(--teal)',opacity:'0.45'}}>{Icons.reports}</div>
-              <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Regular Workers</h3>
-              <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Add regular workers to generate reports</p>
+              <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Workers</h3>
+              <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Add workers to generate reports</p>
             </div>
           ) : (
             <>
@@ -8359,7 +8334,7 @@ function FarmWageManager() {
                 marginBottom: '20px'
               }}>
                 {(() => {
-                  const reportData = getMonthReport(reportMonth, 'regular');
+                  const reportData = getMonthReport(reportMonth);
                   const totalEarned = reportData.reduce((sum, r) => sum + r.earned, 0);
                   const totalBalance = reportData.reduce((sum, r) => sum + r.finalBalance, 0);
                   const totalDays = reportData.reduce((sum, r) => sum + r.totalDays, 0);
@@ -8386,7 +8361,7 @@ function FarmWageManager() {
                       />
                       <StatCard 
                         icon={<div style={{width:'20px',height:'20px',color:'currentColor'}}>{Icons.workers}</div>}
-                        label="Regular Workers"
+                        label="Total Workers"
                         value={reportData.length}
                         color="#9b59b6"
                       />
@@ -8395,308 +8370,225 @@ function FarmWageManager() {
                 })()}
               </div>
 
-              {/* Worker Reports */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {getMonthReport(reportMonth, 'regular').map(report => (
-                  <div key={report.worker.id} style={{
-                    background: 'var(--card)',
-                    borderRadius: '16px',
-                    padding: '20px',
-                    border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
-                  }}>
-                    {/* Header */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: '16px',
-                      paddingBottom: '16px',
-                      borderBottom: '2px solid #f0f0f0'
-                    }}>
-                      <div>
-                        <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
-                          {report.worker.name}
-                        </h3>
-                        <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>
-                          ₹{report.worker.dailyWage}/day
-                        </p>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ 
-                          fontSize: '24px', 
-                          fontWeight: '700', 
-                          color: report.finalBalance > 0 ? 'var(--teal)' : report.finalBalance < 0 ? 'var(--danger)' : 'var(--text-2)'
-                        }}>
-                          ₹{Math.round(report.finalBalance)}
-                        </div>
-                        <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-                          Current Balance
-                        </div>
-                      </div>
-                    </div>
+              {/* Worker Reports — compact one-card-per-worker layout */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {getMonthReport(reportMonth).map(report => {
+                  const balColor = report.finalBalance > 0 ? 'var(--teal)' : report.finalBalance < 0 ? 'var(--danger)' : 'var(--text-2)';
+                  const isSeasonal = report.worker.type === 'seasonal';
 
-                    {/* Attendance Summary */}
-                    <div style={{
-                      background: 'var(--card)',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      border: '1px solid var(--border)',
-                      marginBottom: '12px'
-                    }}>
-                      <h4 style={{
-                        margin: '0 0 12px 0',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: 'var(--text-1)'
-                      }}>
-                        Attendance Summary
-                      </h4>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, 1fr)',
-                        gap: '12px'
-                      }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--teal)' }}>
-                            {report.fullDays}
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginTop: '4px' }}>
-                            Full Days
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '24px', fontWeight: '700', color: '#f39c12' }}>
-                            {report.halfDays}
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginTop: '4px' }}>
-                            Half Days
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--danger)' }}>
-                            {report.absentDays}
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginTop: '4px' }}>
-                            Absent
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                  const attChips = [
+                    { v: report.fullDays,   l: 'Full',   c: 'var(--teal)',            bg: 'rgba(0,184,150,0.10)' },
+                    { v: report.halfDays,   l: 'Half',   c: '#b45309',                bg: '#fff3cd' },
+                    { v: report.absentDays, l: 'Absent', c: 'var(--danger)',          bg: 'rgba(217,54,54,0.10)' },
+                    { v: report.totalDays,  l: 'Days',   c: 'var(--text-2)',          bg: 'var(--surface)' },
+                  ];
 
-                    {/* Payment Summary */}
-                    <div style={{
+                  const ledger = [
+                    { l: 'O', v: report.carriedForward,      c: report.carriedForward > 0 ? '#0077b6' : report.carriedForward < 0 ? 'var(--danger)' : 'var(--text-3)' },
+                    { l: 'E', v: report.earned,              c: 'var(--teal)' },
+                    { l: 'P', v: report.totalPaid,           c: 'var(--danger)' },
+                    { l: 'D', v: report.totalCredits || 0,   c: 'var(--teal)' },
+                  ];
+
+                  // Payments + credits merged into one date-descending list
+                  const txns = [
+                    ...(report.payments || []).map(t => ({ ...t, kind: 'payment' })),
+                    ...(report.credits  || []).map(t => ({ ...t, kind: 'credit'  })),
+                  ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+                  const txnsOpen = expandedReportTxns.has(report.worker.id);
+
+                  return (
+                    <div key={report.worker.id} style={{
                       background: 'var(--card)',
-                      borderRadius: '12px',
-                      padding: '16px',
+                      borderRadius: '14px',
                       border: '1px solid var(--border)',
-                      marginBottom: report.payments?.length > 0 || report.credits?.length > 0 ? '12px' : '0'
+                      boxShadow: '0 1px 6px rgba(13,31,60,0.06)',
+                      overflow: 'hidden'
                     }}>
-                      <h4 style={{
-                        margin: '0 0 12px 0',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: 'var(--text-1)'
-                      }}>
-                        Payment Summary
-                      </h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {report.carriedForward !== 0 && (
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Opening Balance (O)</span>
-                            <span style={{ 
-                              fontSize: '16px', 
-                              fontWeight: '600',
-                              color: report.carriedForward > 0 ? '#0077b6' : '#e74c3c'
-                            }}>
-                              ₹{Math.round(report.carriedForward)}
-                            </span>
-                          </div>
-                        )}
+                      <div style={{ padding: '11px 13px' }}>
+                        {/* Identity + closing balance */}
                         <div style={{
                           display: 'flex',
                           justifyContent: 'space-between',
-                          alignItems: 'center'
+                          alignItems: 'center',
+                          gap: '10px',
+                          marginBottom: '9px'
                         }}>
-                          <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Earnings (E)</span>
-                          <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--teal)' }}>
-                            +₹{Math.round(report.earned)}
-                          </span>
-                        </div>
-                        {report.totalPaid > 0 && (
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Payments (P)</span>
-                            <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--danger)' }}>
-                              -₹{Math.round(report.totalPaid)}
-                            </span>
-                          </div>
-                        )}
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}>
-                          <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Credit Deposit (D)</span>
-                          <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--teal)' }}>
-                            +₹{Math.round(report.totalCredits || 0)}
-                          </span>
-                        </div>
-                        <div style={{
-                          borderTop: '2px solid var(--border)',
-                          paddingTop: '8px',
-                          marginTop: '4px'
-                        }}>
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <span style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-1)' }}>
-                              Closing Balance (C)
-                            </span>
-                            <span style={{ 
-                              fontSize: '18px', 
+                          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-1)' }}>
+                              {report.worker.name}
+                            </h3>
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              background: isSeasonal ? '#fff3cd' : '#d4edda',
+                              color: isSeasonal ? '#856404' : '#155724',
                               fontWeight: '700',
-                              color: report.finalBalance > 0 ? 'var(--teal)' : report.finalBalance < 0 ? 'var(--danger)' : 'var(--text-2)'
+                              whiteSpace: 'nowrap'
                             }}>
-                              ₹{Math.round(report.finalBalance)}
+                              {isSeasonal ? 'Seasonal' : 'Regular'}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-3)', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                              ₹{report.worker.dailyWage}/day
                             </span>
                           </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: '17px', fontWeight: '700', color: balColor, lineHeight: 1.2 }}>
+                              ₹{Math.round(report.finalBalance)}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-3)', fontWeight: '600' }}>
+                              Closing (C)
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Transaction History */}
-                    {((report.payments && report.payments.length > 0) || (report.credits && report.credits.length > 0)) && (
-                      <div style={{
-                        background: 'var(--surface)',
-                        borderRadius: '12px',
-                        padding: '16px'
-                      }}>
-                        <h4 style={{
-                          margin: '0 0 12px 0',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: 'var(--text-1)'
-                        }}>
-                          Transactions This Month
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          {report.payments && report.payments.map(payment => (
-                            <div key={payment.id} style={{
-                              background: 'var(--card)',
-                              padding: '12px',
+                        {/* Attendance chips */}
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '9px' }}>
+                          {attChips.map(chip => (
+                            <span key={chip.l} style={{
+                              display: 'inline-flex',
+                              alignItems: 'baseline',
+                              gap: '4px',
+                              padding: '3px 8px',
                               borderRadius: '8px',
-                              borderLeft: '4px solid #3498db'
+                              background: chip.bg,
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: 'var(--text-3)',
+                              whiteSpace: 'nowrap'
                             }}>
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: payment.notes ? '8px' : '0'
-                              }}>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#3498db' }}>
-                                      <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.money}</span>₹{payment.amount}</span>
-                                    </div>
-                                    <span style={{
-                                      fontSize: '10px',
-                                      padding: '2px 6px',
-                                      borderRadius: '8px',
-                                      background: '#ebf5fb',
-                                      color: '#2874a6',
-                                      fontWeight: '600'
-                                    }}>
-                                      PAYMENT
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-                                    {new Date(payment.date).toLocaleDateString('en-IN', { 
-                                      day: 'numeric', 
-                                      month: 'short', 
-                                      year: 'numeric' 
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                              {payment.notes && (
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: 'var(--text-1)',
-                                  fontStyle: 'italic', color: 'var(--text-2)',
-                                  paddingTop: '8px',
-                                  borderTop: '1px solid var(--border)'
-                                }}>
-                                  💬 {payment.notes}
-                                </div>
-                              )}
-                            </div>
+                              <span style={{ fontSize: '13px', fontWeight: '700', color: chip.c }}>{chip.v}</span>
+                              {chip.l}
+                            </span>
                           ))}
-                          
-                          {report.credits && report.credits.map(credit => (
-                            <div key={credit.id} style={{
-                              background: 'var(--card)',
-                              padding: '12px',
-                              borderRadius: '8px',
-                              borderLeft: '4px solid #0077b6'
-                            }}>
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: credit.notes ? '8px' : '0'
-                              }}>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                    <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--teal)' }}>
-                                      <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.download}</span>₹{credit.amount}</span>
-                                    </div>
-                                    <span style={{
-                                      fontSize: '10px',
-                                      padding: '2px 6px',
-                                      borderRadius: '8px',
-                                      background: '#d4edda',
-                                      color: '#14532d',
-                                      fontWeight: '600'
-                                    }}>
-                                      CREDIT
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-                                    {new Date(credit.date).toLocaleDateString('en-IN', { 
-                                      day: 'numeric', 
-                                      month: 'short', 
-                                      year: 'numeric' 
-                                    })}
-                                  </div>
-                                </div>
+                        </div>
+
+                        {/* O / E / P / D ledger */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(4, 1fr)',
+                          gap: '4px',
+                          borderTop: '1px solid var(--border)',
+                          paddingTop: '8px'
+                        }}>
+                          {ledger.map(item => (
+                            <div key={item.l} style={{ textAlign: 'center', minWidth: 0 }}>
+                              <div style={{ fontSize: '9px', fontWeight: '700', color: 'var(--text-3)', letterSpacing: '0.04em' }}>
+                                {item.l}
                               </div>
-                              {credit.notes && (
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: 'var(--text-1)',
-                                  fontStyle: 'italic', color: 'var(--text-2)',
-                                  paddingTop: '8px',
-                                  borderTop: '1px solid var(--border)'
-                                }}>
-                                  💬 {credit.notes}
-                                </div>
-                              )}
+                              <div style={{
+                                fontSize: '13px',
+                                fontWeight: '700',
+                                color: item.c,
+                                fontFamily: "'DM Mono', monospace"
+                              }}>
+                                {item.l === 'O' ? '' : item.l === 'P' ? '−' : '+'}₹{Math.round(item.v)}
+                              </div>
                             </div>
                           ))}
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Transactions — collapsed by default */}
+                      {txns.length > 0 && (
+                        <>
+                          <button
+                            onClick={() => toggleReportTxns(report.worker.id)}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '5px',
+                              padding: '7px',
+                              background: 'var(--surface)',
+                              border: 'none',
+                              borderTop: '1px solid var(--border)',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              color: 'var(--text-2)',
+                              cursor: 'pointer',
+                              fontFamily: 'inherit'
+                            }}
+                          >
+                            <span style={{
+                              display: 'inline-block',
+                              transform: txnsOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                              transition: 'transform 0.2s ease',
+                              lineHeight: 1
+                            }}>
+                              <span style={{ display: 'inline-flex', width: '11px', height: '11px' }}>{Icons.chevronRight}</span>
+                            </span>
+                            {txnsOpen ? 'Hide' : 'Show'} {txns.length} transaction{txns.length === 1 ? '' : 's'}
+                          </button>
+
+                          {txnsOpen && (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              {txns.map(t => {
+                                const isPay = t.kind === 'payment';
+                                return (
+                                  <div key={t.id} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '7px 13px',
+                                    borderTop: '1px solid var(--border)'
+                                  }}>
+                                    <span style={{
+                                      fontSize: '9px',
+                                      fontWeight: '700',
+                                      padding: '2px 5px',
+                                      borderRadius: '6px',
+                                      flexShrink: 0,
+                                      background: isPay ? '#ebf5fb' : '#d4edda',
+                                      color: isPay ? '#2874a6' : '#14532d'
+                                    }}>
+                                      {isPay ? 'PAYMENT' : 'CREDIT'}
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '500', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                      {new Date(t.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                    {t.notes && (
+                                      <span
+                                        title={t.notes}
+                                        style={{
+                                          flex: '1 1 0',
+                                          minWidth: 0,
+                                          fontSize: '11px',
+                                          color: 'var(--text-3)',
+                                          fontStyle: 'italic',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis'
+                                        }}
+                                      >
+                                        💬 {t.notes}
+                                      </span>
+                                    )}
+                                    <span style={{
+                                      marginLeft: 'auto',
+                                      paddingLeft: '8px',
+                                      fontSize: '12px',
+                                      fontWeight: '700',
+                                      fontFamily: "'DM Mono', monospace",
+                                      color: isPay ? 'var(--danger)' : 'var(--teal)',
+                                      whiteSpace: 'nowrap',
+                                      flexShrink: 0
+                                    }}>
+                                      {isPay ? '−' : '+'}₹{t.amount}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -8943,7 +8835,7 @@ function FarmWageManager() {
               </div>
 
               {/* Seasonal Workers Performance */}
-              {workers.filter(w => w.type === 'seasonal' && w.active !== false).length === 0 ? (
+              {workers.filter(w => w.active !== false).length === 0 ? (
                 <div style={{
                   background: 'var(--card)',
                   borderRadius: '16px',
@@ -8952,12 +8844,12 @@ function FarmWageManager() {
                   border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
                 }}>
                   <div style={{width:'52px',height:'52px',margin:'0 auto 16px',color:'var(--teal)',opacity:'0.45'}}>{Icons.leaf}</div>
-                  <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Seasonal Workers</h3>
-                  <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Add seasonal workers to track their performance</p>
+                  <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Workers</h3>
+                  <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Add workers to track their performance</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {workers.filter(w => w.type === 'seasonal' && w.active !== false).map(worker => {
+                  {workers.filter(w => w.active !== false).map(worker => {
                     const assignedWorks = seasonalWorks.filter(sw => 
                       sw.assignedWorkers && sw.assignedWorkers.includes(worker.id)
                     );
@@ -8988,11 +8880,11 @@ function FarmWageManager() {
                               fontSize: '12px',
                               padding: '3px 8px',
                               borderRadius: '10px',
-                              background: '#fff3cd',
-                              color: '#92400e',
+                              background: worker.type === 'seasonal' ? '#fff3cd' : '#d4edda',
+                              color: worker.type === 'seasonal' ? '#856404' : '#155724',
                               fontWeight: '700'
                             }}>
-                              SEASONAL
+                              {worker.type === 'seasonal' ? 'SEASONAL' : 'REGULAR'}
                             </span>
                           </div>
                           <div style={{ textAlign: 'right' }}>
@@ -10428,7 +10320,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.0.3
+              Version 5.1.0
             </p>
           </div>
         </div>
@@ -10453,11 +10345,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.0.3',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.0.3',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.0.3',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.0.3',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.0.3',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.1.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.1.0',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.1.0',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.1.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.1.0',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10472,10 +10364,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.0.3',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.0.3',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.0.3',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.0.3',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.1.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.1.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.1.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.1.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
