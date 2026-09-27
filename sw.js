@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 5.2.0                                            ║
- * ║  Cache Key    : farm-manager-v5.2.0                              ║
+ * ║  Version      : 5.3.0                                            ║
+ * ║  Cache Key    : farm-manager-v5.3.0                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v5.2.0';
+const CACHE_VERSION = 'v5.3.0';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
@@ -793,7 +793,7 @@ function offlinePage() {
       max-width: 360px; width: 100%; text-align: center;
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
     }
-    .icon { font-size: 72px; margin-bottom: 24px; display: block; line-height: 1; }
+    .icon { display: block; margin: 0 auto 24px; width: 72px; height: 72px; color: #0077b6; }
     h1 { font-size: 24px; font-weight: 700; color: #03045e; margin-bottom: 12px; letter-spacing: -0.4px; }
     p { font-size: 15px; color: #5d6d7e; line-height: 1.65; margin-bottom: 32px; }
     .badge {
@@ -801,6 +801,7 @@ function offlinePage() {
       font-size: 12px; font-weight: 700; padding: 4px 12px;
       border-radius: 20px; margin-bottom: 32px; letter-spacing: 0.3px;
     }
+    .badge svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
     button {
       background: linear-gradient(135deg, #0077b6 0%, #005f8e 100%);
       color: white; border: none; padding: 16px 36px; border-radius: 16px;
@@ -809,20 +810,21 @@ function offlinePage() {
       width: 100%; transition: opacity 0.2s; letter-spacing: -0.2px;
     }
     button:hover { opacity: 0.9; }
+    button svg { width: 18px; height: 18px; vertical-align: -4px; margin-right: 8px; }
     .hint { margin-top: 16px; font-size: 13px; color: #aab7c4; }
   </style>
 </head>
 <body>
   <div class="card">
-    <span class="icon">🌾</span>
-    <div class="badge">🔌 No Internet Connection</div>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 22 16 8"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M15.47 8.53 17 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L17 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M19.47 12.53 21 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L21 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="M2 22 20 4"/></svg>
+    <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg>No Internet Connection</div>
     <h1>You're Offline</h1>
     <p>
       Farm Manager needs a connection to load for the first time.
       Once loaded online, it works fully offline — your data is always
       stored locally on this device.
     </p>
-    <button onclick="window.location.reload()">🔄 Try Again</button>
+    <button onclick="window.location.reload()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>Try Again</button>
     <p class="hint">Your farm data is safe and waiting for you.</p>
   </div>
 </body>

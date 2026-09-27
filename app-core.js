@@ -402,6 +402,95 @@ const Icons = {
       <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
   ),
+  clock: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
+    </svg>
+  ),
+  history: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/>
+    </svg>
+  ),
+  box: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/>
+      <path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/>
+    </svg>
+  ),
+  inbox: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+    </svg>
+  ),
+  mapPin: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>
+    </svg>
+  ),
+  chat: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+    </svg>
+  ),
+  moon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  ),
+  sun: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+    </svg>
+  ),
+  palette: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22a10 10 0 1 1 10-10 3 3 0 0 1-3 3h-2a2 2 0 0 0-1.4 3.4 2 2 0 0 1-1.4 3.6z"/>
+      <circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>
+    </svg>
+  ),
+  key: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2l-2 2M15.5 8.5l-3 3a5 5 0 1 1-2.8-2.8l3-3"/><path d="M15.5 8.5L20 4l-1-1"/>
+    </svg>
+  ),
+  cloud: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+    </svg>
+  ),
+  wrench: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a4 4 0 0 0 5 5l-9.6 9.6a2.1 2.1 0 0 1-3-3l9.6-9.6z"/>
+    </svg>
+  ),
+  expand: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/>
+    </svg>
+  ),
+  collapse: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/>
+    </svg>
+  ),
+  dotFull: (
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <circle cx="12" cy="12" r="8"/>
+    </svg>
+  ),
+  dotHalf: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>
+    </svg>
+  ),
+  dotEmpty: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8"/>
+    </svg>
+  ),
 };
 
 
@@ -552,8 +641,8 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
           {/* ── Expand / collapse all ── */}
           {activeRows.length > 1 && (
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '10px' }}>
-              <button onClick={() => setExpanded(new Set())} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}>⊞ Rows</button>
-              <button onClick={() => setExpanded(new Set(activeRows.map(r => r.worker.id)))} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}>⊟ Rows</button>
+              <button onClick={() => setExpanded(new Set())} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>Rows</span></button>
+              <button onClick={() => setExpanded(new Set(activeRows.map(r => r.worker.id)))} style={{ background: 'none', border: '2px solid var(--teal)', borderRadius: '8px', padding: '5px 12px', fontSize: '12px', fontWeight: '700', color: 'var(--teal)', cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>Rows</span></button>
             </div>
           )}
 
@@ -1307,7 +1396,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.2.0';
+  const APP_VERSION = '5.3.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -2316,7 +2405,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.2.0'
+      version: '5.3.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2507,7 +2596,7 @@ function FarmWageManager() {
             setContacts(migrated.contacts);
             setGeneralNotes(migrated.generalNotes);
             setConfirmDialog({ show: false, message: '', onConfirm: null });
-            alert(`✅ Restored successfully from v${backupVersion} backup.\n\nAll missing fields from older backups have been filled with safe defaults.`);
+            alert(`Restored successfully from v${backupVersion} backup.\n\nAll missing fields from older backups have been filled with safe defaults.`);
             event.target.value = '';
           }
         });
@@ -2604,7 +2693,7 @@ function FarmWageManager() {
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.2.0'
+        version: '5.3.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2629,7 +2718,7 @@ function FarmWageManager() {
       });
 
       if (response.ok) {
-        alert('✅ Backup saved to Google Drive successfully!');
+        alert('Backup saved to Google Drive successfully!');
       } else {
         const error = await response.json();
         throw new Error(error.error?.message || 'Upload failed');
@@ -2721,7 +2810,7 @@ function FarmWageManager() {
                   setContacts(migrated.contacts);
                   setGeneralNotes(migrated.generalNotes);
                   setConfirmDialog({ show: false, message: '', onConfirm: null });
-                  alert(`✅ Restored successfully from v${backupVersion} backup (Google Drive).\n\nAll missing fields from older backups have been filled with safe defaults.`);
+                  alert(`Restored successfully from v${backupVersion} backup (Google Drive).\n\nAll missing fields from older backups have been filled with safe defaults.`);
                 }
               });
             } catch (pickerErr) {
@@ -2883,7 +2972,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.2.0',
+        version:  '5.3.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3023,7 +3112,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.2.0'
+      version: '5.3.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3048,7 +3137,7 @@ function FarmWageManager() {
             const syncTime = lastSyncTimeRef.current;
             if (driveModified && syncTime && driveModified > syncTime) {
               // Drive has data newer than our last sync — another device pushed
-              setGcpSyncError('⚠ Drive has newer data — consider pulling first to avoid overwriting remote edits.');
+              setGcpSyncError('Drive has newer data — consider pulling first to avoid overwriting remote edits.');
               // We still proceed with push (local always wins in auto-sync), but the
               // warning gives the user a chance to pull manually if they prefer.
             }
@@ -3082,7 +3171,7 @@ function FarmWageManager() {
       // If the sync file was missing/trashed and had to be recreated, surface
       // an informational note so the user knows what happened.
       if (wasRecreated) {
-        setGcpSyncNote('ℹ Sync file was missing from Drive and has been recreated automatically.');
+        setGcpSyncNote('Sync file was missing from Drive and has been recreated automatically.');
         setTimeout(() => setGcpSyncNote(''), 8000);
       }
       clearPendingSyncData();   // ← BUG-02 fix: remove IDB payload after normal success
@@ -3107,7 +3196,7 @@ function FarmWageManager() {
           lastSyncTimeRef.current = now;
           setGcpSyncStatus('success');
           if (wasRecreated2) {
-            setGcpSyncNote('ℹ Sync file was missing from Drive and has been recreated automatically.');
+            setGcpSyncNote('Sync file was missing from Drive and has been recreated automatically.');
             setTimeout(() => setGcpSyncNote(''), 8000);
           }
           clearPendingSyncData();   // ← sync succeeded — remove IDB payload
@@ -3421,7 +3510,7 @@ function FarmWageManager() {
             setLastEditTime(raw.exportDate);
             lastEditTimeRef.current = raw.exportDate;
           }
-          alert(`✅ Restored successfully from Google Drive (v${backupVersion}).\n\nAll ${migrated.workers.length} workers and associated data have been loaded.`);
+          alert(`Restored successfully from Google Drive (v${backupVersion}).\n\nAll ${migrated.workers.length} workers and associated data have been loaded.`);
         },
         onCancel: () => {
           setGcpPullStatus('idle');
@@ -3479,24 +3568,24 @@ function FarmWageManager() {
         label: 'App Data',
         color: '#4285f4',
         items: [
-          { key: 'farmWorkers',      label: 'Workers',       icon: '👷', bytes: kb('farmWorkers') },
-          { key: 'farmAttendance',   label: 'Attendance',    icon: '📅', bytes: kb('farmAttendance') },
-          { key: 'farmPayments',     label: 'Payments',      icon: '💰', bytes: kb('farmPayments') },
-          { key: 'farmSpecialNotes', label: 'Worker Notes',  icon: '📝', bytes: kb('farmSpecialNotes') },
-          { key: 'farmSeasonalWorks',label: 'Seasonal Works',icon: '🌱', bytes: kb('farmSeasonalWorks') },
-          { key: 'farmExpenses',     label: 'Expenses',      icon: '🧾', bytes: kb('farmExpenses') },
-          { key: 'farmContractWorks',label: 'Project Works', icon: '🔨', bytes: kb('farmContractWorks') },
-          { key: 'farmPhonebook',    label: 'Phonebook',     icon: '📞', bytes: kb('farmPhonebook') },
-          { key: 'farmGeneralNotes', label: 'General Notes', icon: '💬', bytes: kb('farmGeneralNotes') },
+          { key: 'farmWorkers',      label: 'Workers',       icon: 'workers', bytes: kb('farmWorkers') },
+          { key: 'farmAttendance',   label: 'Attendance',    icon: 'attendance', bytes: kb('farmAttendance') },
+          { key: 'farmPayments',     label: 'Payments',      icon: 'payments', bytes: kb('farmPayments') },
+          { key: 'farmSpecialNotes', label: 'Worker Notes',  icon: 'notes', bytes: kb('farmSpecialNotes') },
+          { key: 'farmSeasonalWorks',label: 'Seasonal Works',icon: 'seasonal', bytes: kb('farmSeasonalWorks') },
+          { key: 'farmExpenses',     label: 'Expenses',      icon: 'expenses', bytes: kb('farmExpenses') },
+          { key: 'farmContractWorks',label: 'Project Works', icon: 'contract', bytes: kb('farmContractWorks') },
+          { key: 'farmPhonebook',    label: 'Phonebook',     icon: 'phonebook', bytes: kb('farmPhonebook') },
+          { key: 'farmGeneralNotes', label: 'General Notes', icon: 'generalnotes', bytes: kb('farmGeneralNotes') },
         ]
       },
       {
         label: 'Settings & Config',
         color: '#8b5cf6',
         items: [
-          { key: 'farmTheme',      label: 'Theme',             icon: '🎨', bytes: kb('farmTheme') },
-          { key: '_googleDrive',   label: 'Google Drive Config', icon: '🔑', bytes: kb('googleClientId') + kb('googleApiKey') },
-          { key: '_gcpSync',       label: 'Cloud Sync Config', icon: '☁️',  bytes: kb('gcpClientId') + kb('gcpClientSecret') + kb('gcpRefreshToken') + kb('gcpSyncFileId') + kb('lastSyncTime') },
+          { key: 'farmTheme',      label: 'Theme',             icon: 'palette', bytes: kb('farmTheme') },
+          { key: '_googleDrive',   label: 'Google Drive Config', icon: 'key', bytes: kb('googleClientId') + kb('googleApiKey') },
+          { key: '_gcpSync',       label: 'Cloud Sync Config', icon: 'cloud',  bytes: kb('gcpClientId') + kb('gcpClientSecret') + kb('gcpRefreshToken') + kb('gcpSyncFileId') + kb('lastSyncTime') },
         ]
       },
     ];
@@ -3505,7 +3594,7 @@ function FarmWageManager() {
       groups.push({
         label: 'Other',
         color: '#94a3b8',
-        items: [{ key: '_other', label: 'Other / Browser', icon: '🔧', bytes: otherBytes }]
+        items: [{ key: '_other', label: 'Other / Browser', icon: 'wrench', bytes: otherBytes }]
       });
     }
 
@@ -3713,7 +3802,7 @@ function FarmWageManager() {
             <div style={{ background: 'var(--card)', borderRadius: '18px', padding: '20px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '6px' }}>Monthly Wages</div>
               <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.5px', fontFamily: "'DM Mono', monospace", color: 'var(--text-1)' }}>₹{stats.monthlyPaid.toLocaleString('en-IN', {maximumFractionDigits:0})}</div>
-              <div style={{ fontSize: '11px', color: 'var(--success)', marginTop: '4px', fontWeight: '600' }}>↑ This month</div>
+              <div style={{ fontSize: '11px', color: 'var(--success)', marginTop: '4px', fontWeight: '600' }}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.trending}</span> This month</div>
             </div>
             <div style={{ background: 'var(--card)', borderRadius: '18px', padding: '20px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '6px' }}>Avg Daily Wage</div>
@@ -4056,7 +4145,7 @@ function FarmWageManager() {
                     gap: '4px'
                   }}
                 >
-                  ⊞ All
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span>
                 </button>
                 <button
                   onClick={() => setCollapsedWorkers(new Set(workers.filter(w => w.active !== false).map(w => w.id)))}
@@ -4075,7 +4164,7 @@ function FarmWageManager() {
                     gap: '4px'
                   }}
                 >
-                  ⊟ All
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span>
                 </button>
               </div>
             )}
@@ -4354,13 +4443,13 @@ function FarmWageManager() {
                 fontSize: '13px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>●</span> Full Day
+                  <span style={{width:'12px',height:'12px',display:'inline-flex',color:'var(--success)'}}>{Icons.dotFull}</span> Full Day
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>◐</span> Half Day
+                  <span style={{width:'12px',height:'12px',display:'inline-flex',color:'#f59e0b'}}>{Icons.dotHalf}</span> Half Day
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>○</span> Absent
+                  <span style={{width:'12px',height:'12px',display:'inline-flex',color:'var(--text-3)'}}>{Icons.dotEmpty}</span> Absent
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.money}</span>Balance</span>
@@ -4406,7 +4495,7 @@ function FarmWageManager() {
                     gap: '4px'
                   }}
                 >
-                  ⊞ All
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span>
                 </button>
                 <button
                   onClick={() => setCollapsedPayments(new Set(workers.filter(w => w.active !== false).map(w => w.id)))}
@@ -4425,7 +4514,7 @@ function FarmWageManager() {
                     gap: '4px'
                   }}
                 >
-                  ⊟ All
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span>
                 </button>
               </div>
             )}
@@ -4582,7 +4671,7 @@ function FarmWageManager() {
                             fontSize: '12px',
                             fontWeight: '700'
                           }}>
-                            🗂 {pastTxnCount} past
+                            <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.history}</span>{pastTxnCount} past</span>
                           </span>
                         )}
                         {/* No activity at all */}
@@ -4851,7 +4940,7 @@ function FarmWageManager() {
                                           paddingTop: '8px',
                                           borderTop: '1px solid var(--border)'
                                         }}>
-                                          💬 {payment.notes}
+                                          <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex',flexShrink:0}}>{Icons.notes}</span>{payment.notes}</span>
                                         </div>
                                       )}
                                     </div>
@@ -5869,7 +5958,7 @@ function FarmWageManager() {
                     cursor: 'pointer'
                   }}
                 >
-                  ⏱️ Hourly
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.clock}</span>Hourly</span>
                 </button>
                 <button
                   type="button"
@@ -6028,7 +6117,7 @@ function FarmWageManager() {
             <div style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <label style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-1)' }}>
-                  📅 Day-wise Entries
+                  <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'14px',height:'14px',display:'inline-flex'}}>{Icons.calendar2}</span>Day-wise Entries</span>
                 </label>
                 <button
                   type="button"
@@ -6142,7 +6231,7 @@ function FarmWageManager() {
                                 borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '14px', lineHeight: 1
                               }}
                               title="Remove row"
-                            >✕</button>
+                            ><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.x}</span></button>
                           </td>
                         </tr>
                       ))}
@@ -6635,7 +6724,7 @@ function FarmWageManager() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-1)' }}>
-                      📦 Items / Inventory Used
+                      <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.box}</span>Items / Inventory Used</span>
                     </h4>
                     <button
                       onClick={() => setContractData({
@@ -6748,7 +6837,7 @@ function FarmWageManager() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-1)' }}>
-                      👷 Labor Payment Entry
+                      <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.workers}</span>Labor Payment Entry</span>
                     </h4>
                     <button
                       onClick={() => setContractData({
@@ -7259,7 +7348,7 @@ function FarmWageManager() {
                 background: 'var(--card)', borderRadius: '16px', padding: '48px 20px',
                 textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
               }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
+                <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'40px',height:'40px',display:'inline-flex'}}>{Icons.inbox}</span></div>
                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)', fontSize: '17px' }}>
                   No Notes for {monthNames[notesFilterMonth.getMonth()]} {notesFilterMonth.getFullYear()}
                 </h3>
@@ -7318,7 +7407,7 @@ function FarmWageManager() {
                           </div>
                           {worker.active === false && (
                             <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginTop: '1px' }}>
-                              ⏸ INACTIVE
+                              <span style={{display:'inline-flex',alignItems:'center',gap:'3px'}}><span style={{width:'9px',height:'9px',display:'inline-flex'}}>{Icons.pause}</span>INACTIVE</span>
                             </div>
                           )}
                         </div>
@@ -7485,8 +7574,8 @@ function FarmWageManager() {
             {/* Expand / Collapse All — only when entries exist */}
             {monthKeys.length > 1 && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setCollapsedSeasonalMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊞ All</button>
-                <button onClick={() => setCollapsedSeasonalMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊟ All</button>
+                <button onClick={() => setCollapsedSeasonalMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
+                <button onClick={() => setCollapsedSeasonalMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
               </div>
             )}
 
@@ -7499,7 +7588,7 @@ function FarmWageManager() {
               </div>
             ) : yearEntries.length === 0 ? (
               <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.inbox}</span></div>
                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Entries for {seasonalFilterYear}</h3>
                 <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Use the arrows to browse other years</p>
               </div>
@@ -7692,8 +7781,8 @@ function FarmWageManager() {
             {/* Expand/Collapse All */}
             {monthKeys.length > 1 && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setCollapsedExpenseMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊞ All</button>
-                <button onClick={() => setCollapsedExpenseMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊟ All</button>
+                <button onClick={() => setCollapsedExpenseMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
+                <button onClick={() => setCollapsedExpenseMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
               </div>
             )}
 
@@ -7706,7 +7795,7 @@ function FarmWageManager() {
               </div>
             ) : yearEntries.length === 0 ? (
               <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.inbox}</span></div>
                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Entries for {expenseFilterYear}</h3>
                 <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Use the arrows to browse other years</p>
               </div>
@@ -7755,7 +7844,7 @@ function FarmWageManager() {
                               <div style={{ paddingRight: '80px' }}>
                                 <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '5px' }}>{expense.title}</div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '2px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.calendar2}</span>{new Date(expense.purchaseDate).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}</span></div>
-                                <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '10px' }}>📦 {expense.quantity} {expense.unit}</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '10px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.box}</span>{expense.quantity} {expense.unit}</span></div>
                                 <div style={{ display: 'inline-block', padding: '8px 12px', background: '#fee2e2', borderRadius: '10px', border: `2px solid #fca5a5` }}>
                                   <div style={{ fontSize: '20px', fontWeight: '700', color: accentColor, marginBottom: '1px' }}>₹{expense.cost.toFixed(2)}</div>
                                   <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500' }}>₹{(expense.cost / expense.quantity).toFixed(2)}/{expense.unit}</div>
@@ -7839,8 +7928,8 @@ function FarmWageManager() {
             {/* Expand/Collapse All */}
             {monthKeys.length > 1 && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setCollapsedContractMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊞ All</button>
-                <button onClick={() => setCollapsedContractMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}>⊟ All</button>
+                <button onClick={() => setCollapsedContractMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
+                <button onClick={() => setCollapsedContractMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
               </div>
             )}
 
@@ -7853,7 +7942,7 @@ function FarmWageManager() {
               </div>
             ) : yearEntries.length === 0 ? (
               <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
-                <div style={{ fontSize: '64px', marginBottom: '16px' }}>📭</div>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'64px',height:'64px',display:'inline-flex'}}>{Icons.inbox}</span></div>
                 <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>No Projects for {contractFilterYear}</h3>
                 <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Use the arrows to browse other years</p>
               </div>
@@ -7915,7 +8004,7 @@ function FarmWageManager() {
                               {/* Items / Inventory Table */}
                               {contract.items && contract.items.filter(i => i.name).length > 0 && (
                                 <div style={{ padding: '12px', background: '#f0f4ff', borderRadius: '10px', marginBottom: '12px', border: '1px solid #c7d2fe' }}>
-                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#4f46e5', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>📦 Items / Inventory Used</div>
+                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#4f46e5', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.box}</span>Items / Inventory Used</span></div>
                                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '4px', marginBottom: '4px' }}>
                                     {['Item Name', 'Qty', 'Unit', 'Cost (₹)'].map((h, i) => (
                                       <div key={i} style={{ fontSize: '10px', fontWeight: '700', color: '#6366f1', textTransform: 'uppercase' }}>{h}</div>
@@ -7935,7 +8024,7 @@ function FarmWageManager() {
                               {/* Labor Payment Table */}
                               {contract.laborPayments && contract.laborPayments.length > 0 && (
                                 <div style={{ padding: '12px', background: '#fffbeb', borderRadius: '10px', marginBottom: '12px', border: '1px solid #fcd34d' }}>
-                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>👷 Labor Payment Entry</div>
+                                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.workers}</span>Labor Payment Entry</span></div>
                                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 2fr', gap: '4px', marginBottom: '4px' }}>
                                     {['Labor Name', 'Date', 'Amount (₹)', 'Comments'].map((h, i) => (
                                       <div key={i} style={{ fontSize: '10px', fontWeight: '700', color: '#d97706', textTransform: 'uppercase' }}>{h}</div>
@@ -8161,7 +8250,7 @@ function FarmWageManager() {
                           </h3>
                           {contact.location && (
                             <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span>📍</span> {contact.location}
+                              <span style={{width:'13px',height:'13px',display:'inline-flex',flexShrink:0}}>{Icons.mapPin}</span> {contact.location}
                             </div>
                           )}
                         </div>
@@ -8194,7 +8283,7 @@ function FarmWageManager() {
                           padding: '10px 14px', background: '#f0fdf4', borderRadius: '10px',
                           border: '1px solid #bbf7d0'
                         }}>
-                          <span style={{ fontSize: '18px' }}>💬</span>
+                          <span style={{width:'18px',height:'18px',display:'inline-flex',color:'#25D366'}}>{Icons.chat}</span>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '11px', color: 'var(--label)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WhatsApp</div>
                             <div style={{ fontSize: '16px', fontWeight: '700', color: '#1a1a1a' }}>{contact.whatsapp}</div>
@@ -8341,7 +8430,7 @@ function FarmWageManager() {
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--navy)', marginBottom: '8px' }}>
-                      💬 WhatsApp
+                      <span style={{display:'inline-flex',alignItems:'center',gap:'5px'}}><span style={{width:'13px',height:'13px',display:'inline-flex',color:'#25D366'}}>{Icons.chat}</span>WhatsApp</span>
                     </label>
                     <input
                       type="tel"
@@ -8796,7 +8885,7 @@ function FarmWageManager() {
                                           textOverflow: 'ellipsis'
                                         }}
                                       >
-                                        💬 {t.notes}
+                                        <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex',flexShrink:0}}>{Icons.notes}</span>{t.notes}</span>
                                       </span>
                                     )}
                                     <span style={{
@@ -9459,7 +9548,7 @@ function FarmWageManager() {
                             padding: '40px 20px',
                             color: 'var(--label)'
                           }}>
-                            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📦</div>
+                            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.box}</span></div>
                             <div style={{ fontSize: '16px', fontWeight: '600' }}>No Expenses</div>
                             <div style={{ fontSize: '14px' }}>No items purchased in {yearlySummaryYear}</div>
                           </div>
@@ -9539,7 +9628,7 @@ function FarmWageManager() {
                       padding: '6px 12px', fontSize: '12px', fontWeight: '700',
                       color: '#b45309', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
                     }}
-                  >⊞ All</button>
+                  ><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
                   <button
                     onClick={() => setCollapsedGeneralNotes(new Set(generalNotes.map(n => n.id)))}
                     title="Collapse all notes"
@@ -9548,7 +9637,7 @@ function FarmWageManager() {
                       padding: '6px 12px', fontSize: '12px', fontWeight: '700',
                       color: '#b45309', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
                     }}
-                  >⊟ All</button>
+                  ><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
                 </>
               )}
               <button
@@ -9877,7 +9966,9 @@ function FarmWageManager() {
                 background: (themes[currentTheme] || themes.arctic).mode === 'dark' ? '#1e1b2e' : '#f0f4ff',
                 color: (themes[currentTheme] || themes.arctic).mode === 'dark' ? '#a78bfa' : '#2563eb'
               }}>
-                {(themes[currentTheme] || themes.arctic).mode === 'dark' ? '🌙 Dark' : '☀️ Light'}
+                {(themes[currentTheme] || themes.arctic).mode === 'dark'
+                  ? <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.moon}</span>Dark</span>
+                  : <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.sun}</span>Light</span>}
               </span>
             </div>
 
@@ -10111,9 +10202,9 @@ function FarmWageManager() {
                 }}>
                   {gcpSyncStatus === 'syncing' && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1s infinite' }} />}
                   {gcpSyncStatus === 'pending' && <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', background: '#ca8a04' }} />}
-                  {gcpSyncStatus === 'error' && '⚠'}
-                  {gcpSyncStatus === 'success' && '✓'}
-                  {gcpSyncStatus === 'idle' && '○'}
+                  {gcpSyncStatus === 'error' && <span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.alert}</span>}
+                  {gcpSyncStatus === 'success' && <span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.check}</span>}
+                  {gcpSyncStatus === 'idle' && <span style={{display:'inline-block',width:'7px',height:'7px',borderRadius:'50%',background:'#94a3b8'}} />}
                   {gcpSyncStatus === 'syncing' ? 'Syncing…' : gcpSyncStatus === 'error' ? 'Sync Error' : gcpSyncStatus === 'success' ? 'Synced' : gcpSyncStatus === 'pending' ? 'Offline' : 'Ready'}
                 </div>
               )}
@@ -10213,7 +10304,7 @@ function FarmWageManager() {
               {/* Error feedback */}
               {(gcpSyncStatus === 'error' || gcpPullStatus === 'error') && (
                 <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fee2e2', borderRadius: '8px', fontSize: '12px', color: '#991b1b', lineHeight: '1.5' }}>
-                  ⚠ {gcpSyncStatus === 'error' ? gcpSyncError : gcpPullError}
+                  <span style={{display:'inline-flex',alignItems:'flex-start',gap:'6px'}}><span style={{width:'14px',height:'14px',display:'inline-flex',flexShrink:0,marginTop:'1px'}}>{Icons.alert}</span><span>{gcpSyncStatus === 'error' ? gcpSyncError : gcpPullError}</span></span>
                 </div>
               )}
               {/* Informational note — shown when the sync file was missing and recreated */}
@@ -10290,7 +10381,7 @@ function FarmWageManager() {
                     {formatSyncTime(lastEditTime)}
                   </div>
                   {lastEditTime && (!lastSyncTime || lastEditTime > lastSyncTime) && (
-                    <div style={{ fontSize: '9px', color: '#d97706', marginTop: '2px', fontWeight: '600' }}>⚠ Unsynced</div>
+                    <div style={{ fontSize: '9px', color: '#d97706', marginTop: '2px', fontWeight: '600' }}><span style={{display:'inline-flex',alignItems:'center',gap:'3px'}}><span style={{width:'10px',height:'10px',display:'inline-flex',color:'#d97706'}}>{Icons.alert}</span>Unsynced</span></div>
                   )}
                 </div>
                 <div style={{ padding: '6px 10px', background: 'var(--card)', borderRadius: '8px', border: '1px solid var(--border)' }}>
@@ -10299,7 +10390,7 @@ function FarmWageManager() {
                     {formatSyncTime(lastSyncTime)}
                   </div>
                   {lastSyncTime && lastEditTime && lastSyncTime >= lastEditTime && (
-                    <div style={{ fontSize: '9px', color: '#16a34a', marginTop: '2px', fontWeight: '600' }}>✓ Up to date</div>
+                    <div style={{ fontSize: '9px', color: '#16a34a', marginTop: '2px', fontWeight: '600' }}><span style={{display:'inline-flex',alignItems:'center',gap:'3px'}}><span style={{width:'10px',height:'10px',display:'inline-flex',color:'#16a34a'}}>{Icons.check}</span>Up to date</span></div>
                   )}
                 </div>
               </div>
@@ -10547,7 +10638,7 @@ function FarmWageManager() {
                   {/* Threshold warning */}
                   {totalPct > 85 && (
                     <div style={{ marginTop: '10px', padding: '9px 12px', background: totalPct > 95 ? '#fee2e2' : '#fef3c7', borderRadius: '8px', fontSize: '12px', color: totalPct > 95 ? '#991b1b' : '#92400e', lineHeight: '1.5', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                      <span style={{flexShrink:0}}>{totalPct > 95 ? '🔴' : '⚠️'}</span>
+                      <span style={{flexShrink:0}}>{totalPct > 95 ? <span style={{display:'inline-block',width:'9px',height:'9px',borderRadius:'50%',background:'#dc2626',marginTop:'3px'}} /> : <span style={{width:'14px',height:'14px',display:'inline-flex'}}>{Icons.alert}</span>}</span>
                       <span><strong>{totalPct > 95 ? 'Critical:' : 'Warning:'}</strong> Storage is {totalPct > 95 ? 'nearly full' : 'running low'}. Download a backup and consider clearing old data to free up space.</span>
                     </div>
                   )}
@@ -10580,7 +10671,7 @@ function FarmWageManager() {
                         return (
                           <div key={ii} style={{ display: 'grid', gridTemplateColumns: '22px 1fr auto', alignItems: 'center', gap: '8px' }}>
                             {/* Icon */}
-                            <span style={{ fontSize: '14px', textAlign: 'center' }}>{item.icon}</span>
+                            <span style={{ width: '14px', height: '14px', display: 'inline-flex', color: g.color, justifyContent: 'center' }}>{Icons[item.icon]}</span>
                             {/* Label + bar */}
                             <div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
@@ -10624,7 +10715,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.2.0
+              Version 5.3.0
             </p>
           </div>
         </div>
@@ -10649,11 +10740,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.2.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.2.0',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.2.0',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.2.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.2.0',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.3.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.3.0',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.3.0',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.3.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.3.0',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10668,10 +10759,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.2.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.2.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.2.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.2.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.3.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.3.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.3.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.3.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -11215,7 +11306,7 @@ const PrevMonthsPanel = React.memo(function PrevMonthsPanel({ worker, payments, 
                               fontStyle: 'italic', color: 'var(--text-2)', paddingTop: '8px',
                               borderTop: '1px solid #eee'
                             }}>
-                              💬 {payment.notes}
+                              <span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex',flexShrink:0}}>{Icons.notes}</span>{payment.notes}</span>
                             </div>
                           )}
                         </div>
@@ -11361,7 +11452,7 @@ function MonthCell({ date, day, status, isFuture, isToday, isCurrentMonth = true
         <div>{day}</div>
         {status && !isFuture && isCurrentMonth && (
           <div style={{ fontSize: '9px', marginTop: '2px' }}>
-            {status === 'present' ? '●' : status === 'half_day' ? '◐' : '○'}
+            {status === 'present' ? <span style={{width:'9px',height:'9px',display:'inline-flex',color:'#16a34a'}}>{Icons.dotFull}</span> : status === 'half_day' ? <span style={{width:'9px',height:'9px',display:'inline-flex',color:'#f59e0b'}}>{Icons.dotHalf}</span> : <span style={{width:'9px',height:'9px',display:'inline-flex',color:'#dc2626'}}>{Icons.dotEmpty}</span>}
           </div>
         )}
         {!hasNotes && isFirstOfMonth && carriedForward !== 0 && isCurrentMonth && (
@@ -11479,7 +11570,7 @@ function MonthCell({ date, day, status, isFuture, isToday, isCurrentMonth = true
                 borderBottom: '1px solid var(--border)'
               }}
             >
-              ● Full Day
+              <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.dotFull}</span>Full Day</span>
             </button>
             <button
               onClick={() => { onClick('half_day'); setShowMenu(false); }}
@@ -11491,7 +11582,7 @@ function MonthCell({ date, day, status, isFuture, isToday, isCurrentMonth = true
                 borderBottom: '1px solid var(--border)'
               }}
             >
-              ◐ Half Day
+              <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.dotHalf}</span>Half Day</span>
             </button>
             <button
               onClick={() => { onClick('absent'); setShowMenu(false); }}
@@ -11502,7 +11593,7 @@ function MonthCell({ date, day, status, isFuture, isToday, isCurrentMonth = true
                 cursor: 'pointer', color: '#7f1d1d'
               }}
             >
-              ○ Absent
+              <span style={{display:'inline-flex',alignItems:'center',gap:'6px'}}><span style={{width:'13px',height:'13px',display:'inline-flex'}}>{Icons.dotEmpty}</span>Absent</span>
             </button>
           </div>
         </Popup>
@@ -11536,7 +11627,7 @@ const AttendanceCell = React.memo(function AttendanceCell({ status, onClick, dat
           transition: 'all 0.2s'
         }}
       >
-        {status === 'present' ? '✓' : status === 'half_day' ? '½' : status === 'absent' ? '✗' : '−'}
+        {status === 'present' ? <span style={{width:'16px',height:'16px',display:'inline-flex'}}>{Icons.check}</span> : status === 'half_day' ? '½' : status === 'absent' ? <span style={{width:'16px',height:'16px',display:'inline-flex'}}>{Icons.x}</span> : '−'}
       </button>
       
       {showMenu && (
