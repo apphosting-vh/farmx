@@ -127,6 +127,20 @@ const useLocalStorage = (key, initialValue) => {
   return [value, setValue];
 };
 
+// ── Living Expense classifications ───────────────────────────────────────────
+// Used by the Living Expenses add/edit modal dropdown and by reports to group
+// household spend by category.
+const LIVING_CATEGORIES = [
+  'Milk',
+  'Groceries',
+  'Internet',
+  'Petrol',
+  'Electrical Items',
+  'Electronic Items',
+  'Clothes',
+  'Misc',
+];
+
 // ── SVG Icon Library ──────────────────────────────────────────────────────────
 // Minimalistic 24×24 stroke-based icons, strokeWidth=1.6, rounded caps/joins
 const Icons = {
@@ -183,6 +197,13 @@ const Icons = {
       <line x1="8" y1="10" x2="16" y2="10"/>
       <line x1="8" y1="14" x2="13" y2="14"/>
       <line x1="12" y1="7" x2="12" y2="17"/>
+    </svg>
+  ),
+  living: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10.5 12 3l9 7.5"/>
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/>
+      <path d="M9.5 21v-6h5v6"/>
     </svg>
   ),
   contract: (
@@ -786,15 +807,16 @@ function YearlyWorkerCostsReport({ workers, attendance, payments, year }) {
 
 // ── YearlySnapshotReport ──────────────────────────────────────────────────────
 // One-screen "where did the money go" snapshot for a single calendar year.
-// Four cost heads, all on a comparable basis:
+// Five cost heads, all on a comparable basis:
 //   1. Worker Earnings — attendance wages, same basis as YearlyWorkerCostsReport (E)
 //   2. Item Costs      — Expenses tab, one row per purchase (cost field)
 //   3. Contract Costs  — Project Works tab, one row per work (contractCost field)
 //   4. Seasonal Costs  — Seasonal Work tab, rate × totalConsumed per work
-// Grand Total = sum of the four heads. Percentages are each head's share of that
+//   5. Living Costs    — Living Expenses tab, one row per entry (amount field)
+// Grand Total = sum of the five heads. Percentages are each head's share of that
 // total. Attendance uses every worker (not just active ones) so the snapshot
 // reconciles with the Worker Costs table below it.
-function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, seasonalWorks, year }) {
+function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, seasonalWorks, livingExpenses, year }) {
   const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // Year is read from the leading YYYY of the stored date string rather than via
@@ -836,7 +858,12 @@ function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, se
       (s, sw) => s + ((Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)), 0
     );
 
-    const grandTotal = workerTotal + itemTotal + contractTotal + seasonalTotal;
+    // 5. Living costs — Living Expenses tab, one row per entry, dated by `date`.
+    const yearLiving = (livingExpenses || []).filter(le => yearOf(le.date) === year);
+    const livingTotal = yearLiving.reduce((s, le) => s + (Number(le.amount) || 0), 0);
+    const livingCats = new Set(yearLiving.map(le => le.category || 'Misc'));
+
+    const grandTotal = workerTotal + itemTotal + contractTotal + seasonalTotal + livingTotal;
 
     const heads = [
       {
@@ -877,13 +904,22 @@ function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, se
         color: '#f39c12',
         detail: `${yearSeasonal.length} work${yearSeasonal.length === 1 ? '' : 's'}`,
       },
+      {
+        key: 'living',
+        label: 'Living Costs',
+        blurb: 'From Living Expenses',
+        amount: livingTotal,
+        icon: 'living',
+        color: '#06b6d4',
+        detail: `${yearLiving.length} entr${yearLiving.length === 1 ? 'y' : 'ies'} · ${livingCats.size} class${livingCats.size === 1 ? '' : 'es'}`,
+      },
     ].map(h => ({
       ...h,
       pct: grandTotal > 0 ? (h.amount / grandTotal) * 100 : 0,
     }));
 
     return { grandTotal, heads, hasAny: grandTotal > 0 };
-  }, [workers, attendance, expenses, contractWorks, seasonalWorks, year]);
+  }, [workers, attendance, expenses, contractWorks, seasonalWorks, livingExpenses, year]);
 
   const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -921,7 +957,7 @@ function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, se
           {fmt(data.grandTotal)}
         </div>
         <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
-          {periodLabel} · across 4 cost heads
+          {periodLabel} · across {data.heads.length} cost heads
         </div>
       </div>
 
@@ -932,7 +968,7 @@ function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, se
             Nothing recorded for {year}
           </div>
           <div style={{ fontSize: '13px' }}>
-            Worker earnings, expenses, project works and seasonal works will appear here.
+            Worker earnings, expenses, project works, seasonal works and living expenses will appear here.
           </div>
         </div>
       ) : (
@@ -992,7 +1028,7 @@ function YearlySnapshotReport({ workers, attendance, expenses, contractWorks, se
           </div>
 
           <div style={{ fontSize: '12px', marginTop: '14px', color: 'var(--text-2)', lineHeight: '1.5' }}>
-            Worker Earnings counts present and half-day attendance at each worker's effective wage (incl. revisions). Item Costs uses the cost of each expense. Contract Costs use the agreed contract value, not the amount already paid. Seasonal Costs use rate × consumption. Percentages are each head's share of the total spend.
+            Worker Earnings counts present and half-day attendance at each worker's effective wage (incl. revisions). Item Costs uses the cost of each expense. Contract Costs use the agreed contract value, not the amount already paid. Seasonal Costs use rate × consumption. Living Costs use the amount recorded against each living expense entry. Percentages are each head's share of the total spend.
           </div>
         </>
       )}
@@ -1136,6 +1172,15 @@ function FarmWageManager() {
     return `${year}-${month}`;
   };
 
+  // Blank form values for the Living Expense add/edit modal
+  const emptyLivingExpenseForm = () => ({
+    title: '',
+    amount: '',
+    date: formatLocalDate(new Date()),
+    category: LIVING_CATEGORIES[0],
+    notes: '',
+  });
+
   // FIX #9: computed once — never recalculates on re-renders
   const [todayDisplay] = useState(() =>
     new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -1147,6 +1192,15 @@ function FarmWageManager() {
   const [specialNotes, setSpecialNotes] = useLocalStorage('farmSpecialNotes', []);
   const [seasonalWorks, setSeasonalWorks] = useLocalStorage('farmSeasonalWorks', []);
   const [expenses, setExpenses] = useLocalStorage('farmExpenses', []);
+  const [livingExpenses, setLivingExpenses] = useLocalStorage('farmLivingExpenses', []);
+  // Classifications offered in the Living Expenses dropdown — maintained from Settings
+  const [livingCategories, setLivingCategories] = useLocalStorage('farmLivingCategories', LIVING_CATEGORIES);
+  // Settings UI state for the classification manager
+  const [newLivingCategory, setNewLivingCategory] = useState('');
+  const [editingLivingCategory, setEditingLivingCategory] = useState(null);
+  const [editingLivingCategoryValue, setEditingLivingCategoryValue] = useState('');
+  // Effective list — guards against a cleared/empty stored list
+  const livingCatList = (livingCategories && livingCategories.length) ? livingCategories : LIVING_CATEGORIES;
   const [currentTheme, setCurrentTheme] = useLocalStorage('farmTheme', 'arctic');
   const theme = themes[currentTheme] || themes.arctic;
   const [showInactiveWorkers, setShowInactiveWorkers] = useState(false);
@@ -1215,6 +1269,12 @@ function FarmWageManager() {
   const [collapsedSeasonalMonths, setCollapsedSeasonalMonths] = useState(new Set());
   const [collapsedExpenseMonths, setCollapsedExpenseMonths] = useState(new Set());
   const [collapsedContractMonths, setCollapsedContractMonths] = useState(new Set());
+  // Living Expenses state
+  const [showLivingExpenseModal, setShowLivingExpenseModal] = useState(false);
+  const [editingLivingExpense, setEditingLivingExpense] = useState(null);
+  const [livingExpenseData, setLivingExpenseData] = useState(() => emptyLivingExpenseForm());
+  const [livingFilterYear, setLivingFilterYear] = useState(new Date().getFullYear());
+  const [collapsedLivingMonths, setCollapsedLivingMonths] = useState(new Set());
   const [notesFilterMonth, setNotesFilterMonth] = useState(() => {
     // Default to current month as a Date set to 1st
     const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d;
@@ -1396,7 +1456,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.3.0';
+  const APP_VERSION = '5.5.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1796,6 +1856,104 @@ function FarmWageManager() {
       message: 'Sure, you want to Delete this expense?',
       onConfirm: () => {
         setExpenses(expenses.filter(e => e.id !== id));
+        setConfirmDialog({ show: false, message: '', onConfirm: null });
+      }
+    });
+  };
+
+  // Living Expense Management
+  const addLivingExpenseFromModal = () => {
+    const title = livingExpenseData.title.trim();
+    const amount = parseFloat(livingExpenseData.amount);
+
+    if (!title || !livingExpenseData.amount || !(amount > 0) || !livingExpenseData.date) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    // Unknown/legacy categories fall back to the option the select displays
+    const category = livingCatList.includes(livingExpenseData.category)
+      ? livingExpenseData.category
+      : (livingCatList[0] || 'Misc');
+
+    if (editingLivingExpense) {
+      setLivingExpenses(livingExpenses.map(le =>
+        le.id === editingLivingExpense.id
+          ? {
+              ...le,
+              title,
+              amount,
+              date: livingExpenseData.date,
+              category,
+              notes: livingExpenseData.notes
+            }
+          : le
+      ));
+      setEditingLivingExpense(null);
+    } else {
+      setLivingExpenses([...livingExpenses, {
+        id: Date.now(),
+        title,
+        amount,
+        date: livingExpenseData.date,
+        category,
+        notes: livingExpenseData.notes,
+        createdAt: new Date().toISOString()
+      }]);
+    }
+
+    setLivingExpenseData(emptyLivingExpenseForm());
+    setShowLivingExpenseModal(false);
+  };
+
+  const deleteLivingExpense = (id) => {
+    setConfirmDialog({
+      show: true,
+      message: 'Sure, you want to Delete this living expense?',
+      onConfirm: () => {
+        setLivingExpenses(livingExpenses.filter(le => le.id !== id));
+        setConfirmDialog({ show: false, message: '', onConfirm: null });
+      }
+    });
+  };
+
+  // Living Expense Classifications (maintained from Settings)
+  const addLivingCategory = () => {
+    const name = (newLivingCategory || '').trim();
+    if (!name) { alert('Enter a classification name'); return; }
+    if (livingCatList.some(c => c.toLowerCase() === name.toLowerCase())) {
+      alert('This classification already exists');
+      return;
+    }
+    setLivingCategories([...livingCatList, name]);
+    setNewLivingCategory('');
+  };
+
+  const saveLivingCategoryRename = (oldName) => {
+    const name = (editingLivingCategoryValue || '').trim();
+    if (!name) { alert('Enter a classification name'); return; }
+    if (name !== oldName && livingCatList.some(c => c.toLowerCase() === name.toLowerCase())) {
+      alert('This classification already exists');
+      return;
+    }
+    if (name !== oldName) {
+      setLivingCategories(livingCatList.map(c => (c === oldName ? name : c)));
+      // Keep recorded entries consistent with the renamed classification
+      setLivingExpenses(livingExpenses.map(le => (le.category === oldName ? { ...le, category: name } : le)));
+    }
+    setEditingLivingCategory(null);
+    setEditingLivingCategoryValue('');
+  };
+
+  const deleteLivingCategory = (name) => {
+    setConfirmDialog({
+      show: true,
+      message: `Delete the classification "${name}"?\n\nIt will be removed from the dropdown. Entries already recorded with it keep their label.`,
+      onConfirm: () => {
+        const next = livingCatList.filter(c => c !== name);
+        setLivingCategories(next.length ? next : LIVING_CATEGORIES);
+        setEditingLivingCategory(null);
+        setEditingLivingCategoryValue('');
         setConfirmDialog({ show: false, message: '', onConfirm: null });
       }
     });
@@ -2401,11 +2559,13 @@ function FarmWageManager() {
       specialNotes,
       seasonalWorks,
       expenses,
+      livingExpenses,
+      livingCategories,
       contractWorks,
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.3.0'
+      version: '5.5.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2493,6 +2653,19 @@ function FarmWageManager() {
     createdAt:    e.createdAt    ?? e.purchaseDate ?? new Date().toISOString(),
   });
 
+  const migrateLivingExpense = (le) => ({
+    id:        le.id        ?? Date.now() + Math.random(),
+    title:     le.title     ?? '',
+    amount:    typeof le.amount === 'number' ? le.amount : parseFloat(le.amount) || 0,
+    date:      le.date      ?? formatLocalDate(new Date()),
+    category:  le.category  ?? 'Misc',
+    notes:     le.notes     ?? '',
+    createdAt: le.createdAt ?? le.date ?? new Date().toISOString(),
+  });
+
+  const migrateLivingCategories = (cats) =>
+    Array.isArray(cats) ? cats.filter(c => typeof c === 'string' && c.trim()) : [];
+
   // Normalise each individual labor payment entry — ensures all fields are
   // present with safe defaults when restoring from older backups.  Added v4.9.0.
   const migrateLaborPayment = (lp) => ({
@@ -2545,6 +2718,10 @@ function FarmWageManager() {
     specialNotes:  (data.specialNotes  || []).map(migrateSpecialNote),
     seasonalWorks: (data.seasonalWorks || []).map(migrateSeasonalWork),
     expenses:      (data.expenses      || []).map(migrateExpense),
+    livingExpenses:(data.livingExpenses|| []).map(migrateLivingExpense),
+    livingCategories: migrateLivingCategories(data.livingCategories).length
+      ? migrateLivingCategories(data.livingCategories)
+      : LIVING_CATEGORIES,
     contractWorks: (data.contractWorks || []).map(migrateContractWork),
     contacts:      (data.contacts      || []).map(migrateContact),
     generalNotes:  (data.generalNotes  || []).map(migrateGeneralNote),
@@ -2592,6 +2769,8 @@ function FarmWageManager() {
             setSpecialNotes(migrated.specialNotes);
             setSeasonalWorks(migrated.seasonalWorks);
             setExpenses(migrated.expenses);
+setLivingExpenses(migrated.livingExpenses);
+                  setLivingCategories(migrated.livingCategories);
             setContractWorks(migrated.contractWorks);
             setContacts(migrated.contacts);
             setGeneralNotes(migrated.generalNotes);
@@ -2689,11 +2868,13 @@ function FarmWageManager() {
         specialNotes,
         seasonalWorks,
         expenses,
+        livingExpenses,
+        livingCategories,
         contractWorks,
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.3.0'
+        version: '5.5.1'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2806,6 +2987,8 @@ function FarmWageManager() {
                   setSpecialNotes(migrated.specialNotes);
                   setSeasonalWorks(migrated.seasonalWorks);
                   setExpenses(migrated.expenses);
+setLivingExpenses(migrated.livingExpenses);
+            setLivingCategories(migrated.livingCategories);
                   setContractWorks(migrated.contractWorks);
                   setContacts(migrated.contacts);
                   setGeneralNotes(migrated.generalNotes);
@@ -2838,7 +3021,7 @@ function FarmWageManager() {
   }, [gcpClientId, gcpClientSecret, gcpRefreshToken]);
 
   React.useEffect(() => {
-    gcpSyncDataRef.current = { workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes };
+    gcpSyncDataRef.current = { workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes };
     if (hasMountedDataRef.current) {
       // This is a real user edit — record local edit timestamp in localStorage
       // so the online-reconnect handler can compare it with lastSyncTime even after a page reload
@@ -2847,7 +3030,7 @@ function FarmWageManager() {
       lastEditTimeRef.current = now;
     }
     hasMountedDataRef.current = true;
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes]);
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes]);
 
   React.useEffect(() => { gcpFileIdRef.current = gcpSyncFileId; }, [gcpSyncFileId]);
   React.useEffect(() => { gcpAccessTokenRef.current = gcpAccessToken; }, [gcpAccessToken]);
@@ -2972,7 +3155,7 @@ function FarmWageManager() {
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.3.0',
+        version:  '5.5.1',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3112,7 +3295,7 @@ function FarmWageManager() {
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.3.0'
+      version: '5.5.1'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3236,7 +3419,7 @@ function FarmWageManager() {
     if (gcpRefreshToken && gcpClientId && gcpClientSecret) {
       triggerGcpSync();
     }
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes]); // eslint-disable-line
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes]); // eslint-disable-line
 
   // Handle OAuth popup callback — detect code in URL on load (runs in popup)
   React.useEffect(() => {
@@ -3477,6 +3660,8 @@ function FarmWageManager() {
         `Attendance     : ${migrated.attendance.length} records`,
         `Payments       : ${migrated.payments.length} records`,
         `Expenses       : ${migrated.expenses.length} records`,
+        `Living Expenses : ${migrated.livingExpenses.length} records`,
+        `Classifications : ${migrated.livingCategories.length} items`,
         `Seasonal Works : ${migrated.seasonalWorks.length} records`,
         `Contract Works : ${migrated.contractWorks.length} records`,
         `Special Notes  : ${migrated.specialNotes.length} records`,
@@ -3496,6 +3681,8 @@ function FarmWageManager() {
           setSpecialNotes(migrated.specialNotes);
           setSeasonalWorks(migrated.seasonalWorks);
           setExpenses(migrated.expenses);
+setLivingExpenses(migrated.livingExpenses);
+          setLivingCategories(migrated.livingCategories);
           setContractWorks(migrated.contractWorks);
           setContacts(migrated.contacts);
           setGeneralNotes(migrated.generalNotes);
@@ -3548,7 +3735,7 @@ function FarmWageManager() {
     // All other (unknown) keys used by the app or browser extensions
     const knownKeys = new Set([
       'farmWorkers','farmAttendance','farmPayments','farmSpecialNotes',
-      'farmSeasonalWorks','farmExpenses','farmContractWorks','farmPhonebook',
+      'farmSeasonalWorks','farmExpenses','farmLivingExpenses','farmLivingCategories','farmContractWorks','farmPhonebook',
       'farmGeneralNotes','farmTheme','googleClientId','googleApiKey',
       'gcpClientId','gcpClientSecret','gcpRefreshToken','gcpSyncFileId','lastSyncTime','lastEditTime'
     ]);
@@ -3574,6 +3761,7 @@ function FarmWageManager() {
           { key: 'farmSpecialNotes', label: 'Worker Notes',  icon: 'notes', bytes: kb('farmSpecialNotes') },
           { key: 'farmSeasonalWorks',label: 'Seasonal Works',icon: 'seasonal', bytes: kb('farmSeasonalWorks') },
           { key: 'farmExpenses',     label: 'Expenses',      icon: 'expenses', bytes: kb('farmExpenses') },
+          { key: 'farmLivingExpenses', label: 'Living Expenses', icon: 'living', bytes: kb('farmLivingExpenses') },
           { key: 'farmContractWorks',label: 'Project Works', icon: 'contract', bytes: kb('farmContractWorks') },
           { key: 'farmPhonebook',    label: 'Phonebook',     icon: 'phonebook', bytes: kb('farmPhonebook') },
           { key: 'farmGeneralNotes', label: 'General Notes', icon: 'generalnotes', bytes: kb('farmGeneralNotes') },
@@ -3584,6 +3772,7 @@ function FarmWageManager() {
         color: '#8b5cf6',
         items: [
           { key: 'farmTheme',      label: 'Theme',             icon: 'palette', bytes: kb('farmTheme') },
+          { key: 'farmLivingCategories', label: 'Living Classifications', icon: 'living', bytes: kb('farmLivingCategories') },
           { key: '_googleDrive',   label: 'Google Drive Config', icon: 'key', bytes: kb('googleClientId') + kb('googleApiKey') },
           { key: '_gcpSync',       label: 'Cloud Sync Config', icon: 'cloud',  bytes: kb('gcpClientId') + kb('gcpClientSecret') + kb('gcpRefreshToken') + kb('gcpSyncFileId') + kb('lastSyncTime') },
         ]
@@ -3607,13 +3796,13 @@ function FarmWageManager() {
   // Recompute whenever any stored data changes
   React.useEffect(() => {
     setStorageStats(computeStorageStats());
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, contractWorks, contacts, generalNotes, currentTheme, gcpRefreshToken, lastSyncTime]);
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, currentTheme, gcpRefreshToken, lastSyncTime]);
 
   // Clear all data
   const clearAllData = () => {
     setConfirmDialog({
       show: true,
-      message: 'Sure, you want to Reset all data? This will delete all workers, attendance, payments, notes, seasonal work, expenses, contract work and contacts. This cannot be undone.',
+      message: 'Sure, you want to Reset all data? This will delete all workers, attendance, payments, notes, seasonal work, expenses, living expenses, contract work and contacts. This cannot be undone.',
       onConfirm: () => {
         setWorkers([]);
         setAttendance([]);
@@ -3621,6 +3810,8 @@ function FarmWageManager() {
         setSpecialNotes([]);
         setSeasonalWorks([]);
         setExpenses([]);
+        setLivingExpenses([]);
+        setLivingCategories(LIVING_CATEGORIES);
         setContractWorks([]);
         setContacts([]);
         setGeneralNotes([]);
@@ -3763,7 +3954,8 @@ function FarmWageManager() {
                activeView === 'payments' ? 'Payments' :
                activeView === 'notes' ? 'Worker Notes' :
                activeView === 'seasonal' ? 'Seasonal Work' :
-               activeView === 'expenses' ? 'Expenses' :
+               activeView === 'expenses' ? 'Farming Expenses' :
+               activeView === 'living' ? 'Living Expenses' :
                activeView === 'contract' ? 'Project Works' :
                activeView === 'phonebook' ? 'Phonebook' :
                activeView === 'reports' ? 'Reports' :
@@ -3839,8 +4031,8 @@ function FarmWageManager() {
       {/* ── Deferred module loading placeholder ──────────────────────────────
            Shown for non-critical views while the first repaint completes.
            Critical views: Dashboard · Attendance · Payments (always immediate)
-           Deferred views: Workers · Notes · Seasonal · Expenses · Contract
-                           Phonebook · Reports · Settings · App Info
+           Deferred views: Workers · Notes · Seasonal · Expenses · Living Expenses
+                           Contract Phonebook · Reports · Settings · App Info
       ─────────────────────────────────────────────────────────────────────── */}
 
       {/* Workers View */}
@@ -6562,6 +6754,226 @@ function FarmWageManager() {
         </div>
       )}
 
+      {/* Living Expense Modal */}
+      {showLivingExpenseModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--card)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '100%',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '18px', height: '18px', display: 'inline-flex', color: '#0ea5e9' }}>{Icons.living}</span>
+              {editingLivingExpense ? 'Edit Living Expense' : 'Add Living Expense'}
+            </h3>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text-1)',
+                marginBottom: '8px'
+              }}>
+                Title *
+              </label>
+              <input
+                type="text"
+                value={livingExpenseData.title}
+                onChange={(e) => setLivingExpenseData({ ...livingExpenseData, title: e.target.value })}
+                placeholder="e.g., Milk, Vegetables, Fuel"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text-1)',
+                marginBottom: '8px'
+              }}>
+                Classification *
+              </label>
+              <select
+                value={livingCatList.includes(livingExpenseData.category) ? livingExpenseData.category : (livingCatList[0] || '')}
+                onChange={(e) => setLivingExpenseData({ ...livingExpenseData, category: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              >
+                {livingCatList.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text-1)',
+                marginBottom: '8px'
+              }}>
+                Amount (₹) *
+              </label>
+              <input
+                type="number"
+                value={livingExpenseData.amount}
+                onChange={(e) => setLivingExpenseData({ ...livingExpenseData, amount: e.target.value })}
+                placeholder="Enter amount spent"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text-1)',
+                marginBottom: '8px'
+              }}>
+                Date *
+              </label>
+              <input
+                type="date"
+                value={livingExpenseData.date}
+                onChange={(e) => setLivingExpenseData({ ...livingExpenseData, date: e.target.value })}
+                max={formatLocalDate(new Date())}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            {/* Notes Field */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: 'var(--text-1)',
+                marginBottom: '8px'
+              }}>
+                Notes
+              </label>
+              <textarea
+                value={livingExpenseData.notes}
+                onChange={(e) => setLivingExpenseData({ ...livingExpenseData, notes: e.target.value })}
+                placeholder="Additional notes or comments about this expense..."
+                rows="3"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  resize: 'vertical',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  setShowLivingExpenseModal(false);
+                  setEditingLivingExpense(null);
+                  setLivingExpenseData(emptyLivingExpenseForm());
+                }}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--card)',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'var(--text-1)',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addLivingExpenseFromModal}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'white',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(14,165,233,0.3)'
+                }}
+              >
+                {editingLivingExpense ? 'Update Living Expense' : 'Add Living Expense'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Contract Work Modal */}
       {showContractModal && (
         <div style={{
@@ -7854,6 +8266,213 @@ function FarmWageManager() {
                                 <div style={{ marginTop: '10px', padding: '8px 12px', background: '#fff9e6', borderRadius: '8px', border: '1px solid #ffd54f' }}>
                                   <div style={{ fontSize: '12px', color:'var(--text-2)', fontWeight:'700', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}><div style={{width:'12px',height:'12px'}}>{Icons.notes}</div>Notes</div>
                                   <div style={{ fontSize: '13px', color: '#4e342e', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{expense.notes}</div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Living Expenses Tab */}
+      {activeView === 'living' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(0,184,150,0.2)', borderTopColor:'var(--teal)' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Living Expenses…</span>
+        </div>
+      )}
+      {activeView === 'living' && deferredReady && (() => {
+        const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const accentColor = '#0ea5e9';
+        const fmtAmount = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const yearEntries = livingExpenses
+          .filter(le => new Date(le.date).getFullYear() === livingFilterYear)
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const monthGroups = {};
+        yearEntries.forEach(le => {
+          const key = le.date.slice(0, 7);
+          if (!monthGroups[key]) monthGroups[key] = [];
+          monthGroups[key].push(le);
+        });
+        const monthKeys = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+
+        const toggleLivingMonth = (key) => {
+          setCollapsedLivingMonths(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+          });
+        };
+
+        const yearTotal = yearEntries.reduce((s, le) => s + (Number(le.amount) || 0), 0);
+
+        // Classification breakdown for the selected year (reporting).
+        // Configured classifications come first; labels still present on old
+        // entries are appended so nothing recorded ever disappears from here.
+        const breakdownCats = Array.from(new Set([
+          ...livingCatList,
+          ...yearEntries.map(le => le.category || 'Misc')
+        ]));
+        const categoryTotals = breakdownCats
+          .map(cat => {
+            const rows = yearEntries.filter(le => (le.category || 'Misc') === cat);
+            return { cat, count: rows.length, total: rows.reduce((s, le) => s + (Number(le.amount) || 0), 0) };
+          })
+          .filter(c => c.count > 0)
+          .sort((a, b) => b.total - a.total);
+
+        const openLivingExpenseModal = (entry) => {
+          setEditingLivingExpense(entry);
+          setLivingExpenseData(entry
+            ? { title: entry.title, amount: String(entry.amount ?? ''), date: entry.date, category: entry.category || 'Misc', notes: entry.notes || '' }
+            : emptyLivingExpenseForm()
+          );
+          setShowLivingExpenseModal(true);
+        };
+
+        return (
+          <div style={{ padding: '20px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-1)', display:'flex', alignItems:'center', gap:'8px' }}><div style={{width:'20px',height:'20px',color:accentColor}}>{Icons.living}</div>Living Expenses</h2>
+              <button
+                onClick={() => { setEditingLivingExpense(null); setLivingExpenseData(emptyLivingExpenseForm()); setShowLivingExpenseModal(true); }}
+                style={{ background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', color: 'var(--navy)', border: 'none', padding: '10px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '7px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,201,167,0.25)' }}
+              ><div style={{width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center'}}>{Icons.plus}</div> Add Living Expense</button>
+            </div>
+
+            {/* Year Navigation */}
+            <div style={{ background: 'var(--card)', borderRadius: '14px', padding: '12px 16px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button onClick={() => { setLivingFilterYear(y => y - 1); setCollapsedLivingMonths(new Set()); }} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', width: '34px', height: '34px', cursor: 'pointer', color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{width:'18px',height:'18px'}}>{Icons.chevronLeft}</div></button>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>{livingFilterYear}</div>
+                <div style={{ fontSize: '12px', color: accentColor, fontWeight: '600', marginTop: '2px' }}>
+                  {yearEntries.length === 0 ? 'No entries this year' : `${yearEntries.length} entr${yearEntries.length > 1 ? 'ies' : 'y'} · ₹${fmtAmount(yearTotal)}`}
+                </div>
+              </div>
+              <button onClick={() => { setLivingFilterYear(y => y + 1); setCollapsedLivingMonths(new Set()); }} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', width: '34px', height: '34px', cursor: 'pointer', color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{width:'18px',height:'18px'}}>{Icons.chevronRight}</div></button>
+            </div>
+
+            {/* Year summary card */}
+            {yearEntries.length > 0 && (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '16px 20px', marginBottom: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '2px' }}>{livingFilterYear} Total Living Expenses</div>
+                  <div style={{ fontSize: '26px', fontWeight: '700', color: accentColor }}>₹{fmtAmount(yearTotal)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '2px' }}>Entries</div>
+                  <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-1)' }}>{yearEntries.length}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Classification breakdown */}
+            {categoryTotals.length > 0 && (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '16px 20px', marginBottom: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '12px' }}>By Classification</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
+                  {categoryTotals.map(c => (
+                    <div key={c.cat} style={{ background: 'var(--surface)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '600', marginBottom: '4px' }}>{c.cat}</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(c.total)}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{c.count} entr{c.count > 1 ? 'ies' : 'y'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Expand/Collapse All */}
+            {monthKeys.length > 1 && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setCollapsedLivingMonths(new Set())} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
+                <button onClick={() => setCollapsedLivingMonths(new Set(monthKeys))} style={{ background: 'none', border: `2px solid ${accentColor}`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
+              </div>
+            )}
+
+            {/* Empty states */}
+            {livingExpenses.length === 0 ? (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{width:'52px',height:'52px',margin:'0 auto 16px',color:accentColor,opacity:'0.45'}}>{Icons.living}</div>
+                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Living Expenses</h3>
+                <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Track household spending like Milk, Groceries and Petrol here</p>
+              </div>
+            ) : yearEntries.length === 0 ? (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.inbox}</span></div>
+                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Entries for {livingFilterYear}</h3>
+                <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Use the arrows to browse other years</p>
+              </div>
+            ) : (
+              <div className="fm-list">
+                {monthKeys.map((key) => {
+                  const [yr, mo] = key.split('-');
+                  const label = `${MONTH_NAMES[parseInt(mo) - 1]} ${yr}`;
+                  const entries = monthGroups[key];
+                  const monthTotal = entries.reduce((s, le) => s + (Number(le.amount) || 0), 0);
+                  const collapsed = collapsedLivingMonths.has(key);
+
+                  return (
+                    <div key={key} style={{ background: 'var(--card)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                      {/* Month header toggle */}
+                      <button
+                        onClick={() => toggleLivingMonth(key)}
+                        style={{ width:'100%', padding:'13px 16px', border:'none', background: collapsed ? 'var(--card)' : 'var(--surface)', borderBottom: collapsed ? 'none' : '1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', textAlign:'left', borderRadius: collapsed ? '12px' : '12px 12px 0 0' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width:'18px', height:'18px', color: accentColor, display:'flex', alignItems:'center', justifyContent:'center', transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.22s ease' }}>{Icons.chevronRight}</div>
+                          <div>
+                            <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>{label}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--label)', marginTop: '2px', fontWeight: '500' }}>{entries.length} entr{entries.length > 1 ? 'ies' : 'y'}</div>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: accentColor }}>₹{fmtAmount(monthTotal)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500' }}>total</div>
+                        </div>
+                      </button>
+
+                      {/* Living expense entries */}
+                      {!collapsed && (
+                        <div style={{ padding: '12px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {entries.map(entry => (
+                            <div key={entry.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px', borderLeft: `4px solid ${accentColor}`, position: 'relative' }}>
+                              {/* Edit/Delete */}
+                              <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => openLivingExpenseModal(entry)}
+                                  style={{ background:'rgba(37,99,235,0.08)', color:'#2563eb', border:'1px solid rgba(37,99,235,0.2)', padding:'6px', borderRadius:'7px', cursor:'pointer', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center' }}
+                                ><div style={{width:'15px',height:'15px'}}>{Icons.edit}</div></button>
+                                <button onClick={() => deleteLivingExpense(entry.id)} style={{ background:'rgba(220,38,38,0.08)', color:'var(--danger)', border:'1px solid rgba(220,38,38,0.2)', padding:'6px', borderRadius:'7px', cursor:'pointer', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center' }}><div style={{width:'15px',height:'15px'}}>{Icons.trash}</div></button>
+                              </div>
+                              <div style={{ paddingRight: '80px' }}>
+                                <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '5px' }}>{entry.title}</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '6px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.calendar2}</span>{new Date(entry.date).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}</span></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                                  <span style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'4px 10px', background:'rgba(14,165,233,0.10)', border:'1px solid rgba(14,165,233,0.30)', borderRadius:'10px', fontSize:'12px', fontWeight:'700', color:'#0369a1' }}>
+                                    <span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.box}</span>
+                                    {entry.category || 'Misc'}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'inline-block', padding: '8px 12px', background: '#e0f2fe', borderRadius: '10px', border: '2px solid #7dd3fc' }}>
+                                  <div style={{ fontSize: '20px', fontWeight: '700', color: '#0369a1', marginBottom: '1px' }}>₹{fmtAmount(entry.amount)}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500' }}>amount paid</div>
+                                </div>
+                              </div>
+                              {entry.notes && (
+                                <div style={{ marginTop: '10px', padding: '8px 12px', background: '#fff9e6', borderRadius: '8px', border: '1px solid #ffd54f' }}>
+                                  <div style={{ fontSize: '12px', color:'var(--text-2)', fontWeight:'700', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}><div style={{width:'12px',height:'12px'}}>{Icons.notes}</div>Notes</div>
+                                  <div style={{ fontSize: '13px', color: '#4e342e', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{entry.notes}</div>
                                 </div>
                               )}
                             </div>
@@ -9324,7 +9943,7 @@ function FarmWageManager() {
               )}
             </>
           ) : (
-            /* Yearly Snapshot - combined spend summary across all 4 cost heads */
+            /* Yearly Snapshot - combined spend summary across all 5 cost heads */
             <>
               {/* Year Navigation — shares yearlySummaryYear with the Yearly Summary below */}
               <div style={{
@@ -9392,6 +10011,7 @@ function FarmWageManager() {
                 expenses={expenses}
                 contractWorks={contractWorks}
                 seasonalWorks={seasonalWorks}
+                livingExpenses={livingExpenses}
                 year={yearlySummaryYear}
               />
 
@@ -9579,6 +10199,205 @@ function FarmWageManager() {
                                   color: 'var(--danger)'
                                 }}>
                                   ₹{Math.round(data.totalCost).toLocaleString()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* View 3: Seasonal Work Costs */}
+                <div style={{
+                  background: 'var(--card)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  marginTop: '24px',
+                  border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+                }}>
+                  <h3 style={{
+                    margin: '0 0 20px 0',
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: 'var(--text-1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{ width: '18px', height: '18px', display: 'inline-flex', color: '#f39c12' }}>{Icons.seasonal}</span>
+                    Seasonal Work Costs
+                  </h3>
+
+                  {(() => {
+                    const yOf = (d) => { const n = parseInt(String(d || '').slice(0, 4), 10); return Number.isFinite(n) ? n : null; };
+                    const yearWorks = (seasonalWorks || []).filter(sw => yOf(sw.startDate) === yearlySummaryYear);
+                    const totalSeasonal = yearWorks.reduce(
+                      (s, sw) => s + ((Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)), 0
+                    );
+                    const worksWithTotal = yearWorks.map(sw => ({
+                      ...sw,
+                      total: (Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)
+                    })).sort((a, b) => b.total - a.total);
+
+                    return (
+                      <>
+                        <div style={{
+                          padding: '20px',
+                          background: 'linear-gradient(135deg, #f39c12 0%, #d68910 100%)',
+                          borderRadius: '12px',
+                          color: 'white',
+                          marginBottom: '20px'
+                        }}>
+                          <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
+                            Total Seasonal Work Spend
+                          </div>
+                          <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                            ₹{Math.round(totalSeasonal).toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
+                            {yearWorks.length} work{yearWorks.length === 1 ? '' : 's'} in {yearlySummaryYear} · rate × consumed
+                          </div>
+                        </div>
+
+                        {yearWorks.length === 0 ? (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '40px 20px',
+                            color: 'var(--label)'
+                          }}>
+                            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.seasonal}</span></div>
+                            <div style={{ fontSize: '16px', fontWeight: '600' }}>No Seasonal Work</div>
+                            <div style={{ fontSize: '14px' }}>No seasonal work recorded for {yearlySummaryYear}</div>
+                          </div>
+                        ) : (
+                          <div className="fm-list">
+                            {worksWithTotal.map(work => (
+                              <div key={work.id} style={{
+                                padding: '16px',
+                                background: 'var(--surface)',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '4px' }}>
+                                    {work.title}
+                                  </div>
+                                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
+                                    ₹{(Number(work.rate) || 0).toLocaleString('en-IN')}/{work.rateType === 'hourly' ? 'h' : 'day'} × {work.totalConsumed} {work.rateType === 'hourly' ? 'hrs' : 'days'}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  fontSize: '20px',
+                                  fontWeight: '700',
+                                  color: '#d68910'
+                                }}>
+                                  ₹{Math.round(work.total).toLocaleString('en-IN')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* View 4: Living Expenses */}
+                <div style={{
+                  background: 'var(--card)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  marginTop: '24px',
+                  border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+                }}>
+                  <h3 style={{
+                    margin: '0 0 20px 0',
+                    fontSize: '20px',
+                    fontWeight: '700',
+                    color: 'var(--text-1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{ width: '18px', height: '18px', display: 'inline-flex', color: '#06b6d4' }}>{Icons.living}</span>
+                    Living Expenses
+                  </h3>
+
+                  {(() => {
+                    const yOf = (d) => { const n = parseInt(String(d || '').slice(0, 4), 10); return Number.isFinite(n) ? n : null; };
+                    const yearLivingEntries = (livingExpenses || []).filter(le => yOf(le.date) === yearlySummaryYear);
+                    const totalLiving = yearLivingEntries.reduce((s, le) => s + (Number(le.amount) || 0), 0);
+
+                    const byCategory = {};
+                    yearLivingEntries.forEach(le => {
+                      const cat = le.category || 'Misc';
+                      if (!byCategory[cat]) byCategory[cat] = { count: 0, total: 0 };
+                      byCategory[cat].count += 1;
+                      byCategory[cat].total += Number(le.amount) || 0;
+                    });
+                    const catRows = Object.entries(byCategory)
+                      .map(([cat, d]) => ({ cat, ...d }))
+                      .sort((a, b) => b.total - a.total);
+
+                    return (
+                      <>
+                        <div style={{
+                          padding: '20px',
+                          background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+                          borderRadius: '12px',
+                          color: 'white',
+                          marginBottom: '20px'
+                        }}>
+                          <div style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
+                            Total Living Spend
+                          </div>
+                          <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                            ₹{Math.round(totalLiving).toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '12px', marginTop: '4px', opacity: 1 }}>
+                            {yearLivingEntries.length} entr{yearLivingEntries.length === 1 ? 'y' : 'ies'} in {yearlySummaryYear} · {catRows.length} classificat{catRows.length === 1 ? 'ion' : 'ions'}
+                          </div>
+                        </div>
+
+                        {yearLivingEntries.length === 0 ? (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '40px 20px',
+                            color: 'var(--label)'
+                          }}>
+                            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.living}</span></div>
+                            <div style={{ fontSize: '16px', fontWeight: '600' }}>No Living Expenses</div>
+                            <div style={{ fontSize: '14px' }}>No living expenses recorded for {yearlySummaryYear}</div>
+                          </div>
+                        ) : (
+                          <div className="fm-list">
+                            {catRows.map(row => (
+                              <div key={row.cat} style={{
+                                padding: '16px',
+                                background: 'var(--surface)',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '4px' }}>
+                                    {row.cat}
+                                  </div>
+                                  <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
+                                    {row.count} entr{row.count === 1 ? 'y' : 'ies'}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  fontSize: '20px',
+                                  fontWeight: '700',
+                                  color: '#0e7490'
+                                }}>
+                                  ₹{Math.round(row.total).toLocaleString('en-IN')}
                                 </div>
                               </div>
                             ))}
@@ -10498,6 +11317,17 @@ function FarmWageManager() {
                 alignItems: 'center',
                 marginTop: '8px'
               }}>
+                <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Living Expenses</span>
+                <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
+                  {livingExpenses.length}
+                </span>
+              </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '8px'
+              }}>
                 <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Contracts</span>
                 <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
                   {contractWorks.length}
@@ -10559,6 +11389,105 @@ function FarmWageManager() {
               lineHeight: '1.5'
             }}>
               <strong>Warning:</strong> Clearing data will permanently delete everything. Make sure to backup first!
+            </div>
+          </div>
+
+          {/* Living Expense Classifications */}
+          <div style={{
+            background: 'var(--card)',
+            borderRadius: '16px',
+            padding: '20px',
+            marginBottom: '16px',
+            border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(6,182,212,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#06b6d4' }}>
+                <span style={{ width: '18px', height: '18px', display: 'inline-flex' }}>{Icons.living}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>Living Expense Classifications</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '500' }}>Choices shown in the Living Expenses dropdown</div>
+              </div>
+            </div>
+
+            {/* Add new classification */}
+            <div style={{ display: 'flex', gap: '8px', margin: '16px 0 14px' }}>
+              <input
+                type="text"
+                value={newLivingCategory}
+                onChange={(e) => setNewLivingCategory(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addLivingCategory(); }}
+                placeholder="e.g., School Fees"
+                style={{ flex: 1, minWidth: 0, padding: '12px 14px', border: '2px solid var(--border)', borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)' }}
+              />
+              <button
+                onClick={addLivingCategory}
+                style={{
+                  padding: '12px 18px', border: 'none', whiteSpace: 'nowrap',
+                  background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)',
+                  color: 'var(--navy)', borderRadius: '10px', fontSize: '14px', fontWeight: '700',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                <span style={{ width: '14px', height: '14px', display: 'inline-flex' }}>{Icons.plus}</span>
+                Add
+              </button>
+            </div>
+
+            {/* Classification list */}
+            <div className="fm-list">
+              {livingCatList.map(cat => {
+                const inUse = livingExpenses.filter(le => (le.category || 'Misc') === cat).length;
+                const isEditing = editingLivingCategory === cat;
+                return (
+                  <div key={cat} style={{ padding: '12px 14px', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingLivingCategoryValue}
+                          onChange={(e) => setEditingLivingCategoryValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveLivingCategoryRename(cat);
+                            if (e.key === 'Escape') { setEditingLivingCategory(null); setEditingLivingCategoryValue(''); }
+                          }}
+                          autoFocus
+                          style={{ flex: 1, minWidth: 0, padding: '9px 12px', border: '2px solid var(--teal)', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', background: 'var(--card)', color: 'var(--text-1)' }}
+                        />
+                        <button
+                          onClick={() => saveLivingCategoryRename(cat)}
+                          title="Save"
+                          style={{ background: 'rgba(0,184,150,0.12)', color: '#0f9b8e', border: '1px solid rgba(0,184,150,0.3)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        ><div style={{ width: '15px', height: '15px' }}>{Icons.check}</div></button>
+                        <button
+                          onClick={() => { setEditingLivingCategory(null); setEditingLivingCategoryValue(''); }}
+                          title="Cancel"
+                          style={{ background: 'var(--card)', color: 'var(--text-2)', border: '1px solid var(--border)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        ><div style={{ width: '15px', height: '15px' }}>{Icons.x}</div></button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', overflowWrap: 'anywhere' }}>{cat}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '600', whiteSpace: 'nowrap' }}>{inUse} {inUse === 1 ? 'entry' : 'entries'}</span>
+                        <button
+                          onClick={() => { setEditingLivingCategory(cat); setEditingLivingCategoryValue(cat); }}
+                          title="Rename"
+                          style={{ background: 'rgba(37,99,235,0.08)', color: '#2563eb', border: '1px solid rgba(37,99,235,0.2)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        ><div style={{ width: '15px', height: '15px' }}>{Icons.edit}</div></button>
+                        <button
+                          onClick={() => deleteLivingCategory(cat)}
+                          title="Delete"
+                          style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--danger)', border: '1px solid rgba(220,38,38,0.2)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        ><div style={{ width: '15px', height: '15px' }}>{Icons.trash}</div></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ padding: '12px', background: 'var(--surface)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-2)', marginTop: '12px', lineHeight: '1.5', border: '1px solid var(--border)' }}>
+              Renaming also updates the entries already recorded with that classification. Deleting only removes it from the dropdown — existing entries keep their label.
             </div>
           </div>
 
@@ -10715,7 +11644,7 @@ function FarmWageManager() {
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.3.0
+              Version 5.5.1
             </p>
           </div>
         </div>
@@ -10740,11 +11669,11 @@ function FarmWageManager() {
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.3.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.3.0',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.3.0',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.3.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.3.0',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.5.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.5.1',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.5.1',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Background Sync Payload',       value: '5.5.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.5.1',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10759,10 +11688,10 @@ function FarmWageManager() {
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.3.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.3.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.3.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.3.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.5.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.5.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.5.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.5.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -10881,7 +11810,8 @@ function FarmWageManager() {
             <div className="fm-sidebar-section-label" style={{ fontSize: '9.5px', fontWeight: '700', color: 'rgba(255,255,255,0.70)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '8px 6px 4px 6px' }}>Finance</div>
           )}
           <NavButton icon={Icons.seasonal} label="Seasonal Work" active={activeView === 'seasonal'} onClick={() => handleNavClick('seasonal')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Seasonal Work" />
-          <NavButton icon={Icons.expenses} label="Expenses"     active={activeView === 'expenses'} onClick={() => handleNavClick('expenses')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Expenses" />
+          <NavButton icon={Icons.expenses} label="Farming Expenses" active={activeView === 'expenses'} onClick={() => handleNavClick('expenses')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Farming Expenses" />
+          <NavButton icon={Icons.living}   label="Living Expenses" active={activeView === 'living'} onClick={() => handleNavClick('living')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Living Expenses" />
           <NavButton icon={Icons.contract} label="Project Works" active={activeView === 'contract'} onClick={() => handleNavClick('contract')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Project Works" />
           <NavButton icon={Icons.reports}  label="Reports"      active={activeView === 'reports'}  onClick={() => handleNavClick('reports')}  collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Reports" />
         </div>
@@ -11833,11 +12763,13 @@ const NavButton = React.memo(function NavButton({ icon, label, active, onClick, 
           fontSize: '9px',
           fontWeight: active ? '700' : '600',
           letterSpacing: '0.01em',
-          lineHeight: '1.1',
+          lineHeight: '1.15',
           maxWidth: '64px',
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          whiteSpace: 'normal',
           color: active ? 'var(--sidebar-active-fg)' : 'rgba(255,255,255,0.92)',
         }}>
           {tooltip}
@@ -11847,9 +12779,12 @@ const NavButton = React.memo(function NavButton({ icon, label, active, onClick, 
           fontSize: '13px',
           fontWeight: active ? '600' : '500',
           letterSpacing: '-0.1px',
+          lineHeight: '1.2',
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          whiteSpace: 'normal',
           flex: 1,
           textAlign: 'left'
         }}>
