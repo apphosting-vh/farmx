@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 5.5.1                                            ║
- * ║  Cache Key    : farm-manager-v5.5.1                              ║
+ * ║  Version      : 5.6.0                                            ║
+ * ║  Cache Key    : farm-manager-v5.6.0                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -39,7 +39,7 @@
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  ⚠️  HOW TO RELEASE A NEW VERSION                                ║
  * ║     1. Change CACHE_VERSION string below (e.g. v2.6.0)           ║
- * ║     2. Change APP_VERSION in index.html to match                 ║
+ * ║     2. Change APP_VERSION in app-core.js to match                ║
  * ║     3. Push both files to GitHub — Pages redeploys automatically ║
  * ║     Browser detects SW byte-change → update flow begins          ║
  * ╚══════════════════════════════════════════════════════════════════╝
@@ -48,8 +48,8 @@
 'use strict';
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
-// Must match APP_VERSION constant in index.html.
-const CACHE_VERSION = 'v5.5.1';
+// Must match APP_VERSION constant in app-core.js.
+const CACHE_VERSION = 'v5.6.0';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
@@ -441,6 +441,9 @@ self.addEventListener('sync', event => {
   if (event.tag === 'gcp-data-sync') {
     console.log('[SW] Background sync event fired — attempting Drive upload');
     event.waitUntil(performBackgroundSync());
+  } else if (event.tag === DAILY_BACKUP_PERIODIC_TAG) {
+    console.log('[SW] Daily backup sync event fired');
+    event.waitUntil(performDailyBackup());
   }
 });
 
@@ -581,6 +584,211 @@ async function performBackgroundSync() {
       );
     } catch (_) {}
     throw err; // re-throw so browser schedules an automatic retry
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUTOMATIC DAILY BACKUP — periodic wake-up + timestamped Drive snapshots
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DAILY_BACKUP_FOLDER_NAME   = 'Farm Manager Daily Backup';
+const DAILY_BACKUP_INTERVAL_MS   = 24 * 60 * 60 * 1000;
+const DAILY_BACKUP_PERIODIC_TAG  = 'farm-manager-daily-backup';
+
+// Chromium (installed PWA) may wake the SW roughly once a day. The page also
+// registers this tag and keeps a data snapshot in IndexedDB; when the browser
+// has no Periodic Background Sync support the in-app scheduler covers it.
+self.addEventListener('periodicsync', event => {
+  if (event.tag === DAILY_BACKUP_PERIODIC_TAG) {
+    console.log('[SW] Periodic daily backup event fired');
+    event.waitUntil(performDailyBackup());
+  }
+});
+
+const swPad = n => String(n).padStart(2, '0');
+
+function swDailyBackupFileName(date = new Date()) {
+  return `farm-wage-backup-${date.getFullYear()}-${swPad(date.getMonth() + 1)}-${swPad(date.getDate())}`
+    + `_${swPad(date.getHours())}-${swPad(date.getMinutes())}-${swPad(date.getSeconds())}.json`;
+}
+
+async function swDriveJson(url, token, options = {}) {
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || data.error) {
+    throw new Error(data.error?.message || `Drive request failed (HTTP ${resp.status})`);
+  }
+  return data;
+}
+
+async function resolveDailyBackupFolder(token, db) {
+  const cachedId = await idbGet(db, 'dailyBackupFolderId');
+  if (cachedId) {
+    try {
+      const check = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${cachedId}?fields=id,trashed,mimeType`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (check.ok) {
+        const meta = await check.json();
+        if (!meta.trashed && meta.mimeType === 'application/vnd.google-apps.folder') {
+          return cachedId;
+        }
+      }
+    } catch (_) { /* stale / deleted / different account — search again */ }
+    await idbPut(db, 'dailyBackupFolderId', '');
+  }
+
+  const q = encodeURIComponent(
+    `name='${DAILY_BACKUP_FOLDER_NAME.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+  );
+  const found = await swDriveJson(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`,
+    token
+  );
+  if (found.files && found.files.length > 0) {
+    const id = found.files[0].id;
+    await idbPut(db, 'dailyBackupFolderId', id);
+    return id;
+  }
+
+  const created = await swDriveJson(
+    'https://www.googleapis.com/drive/v3/files?fields=id',
+    token,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: DAILY_BACKUP_FOLDER_NAME,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: ['root'],
+      }),
+    }
+  );
+  await idbPut(db, 'dailyBackupFolderId', created.id);
+  return created.id;
+}
+
+async function notifyDailyBackupClients(message) {
+  try {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach(client => client.postMessage(message));
+  } catch (_) { /* no clients — nothing to notify */ }
+}
+
+/**
+ * Check the newest backup in the daily folder and upload a fresh timestamped
+ * snapshot only when it is more than 24 hours old. Runs entirely inside the
+ * service worker, so it needs no user interaction and no open app tab.
+ */
+async function performDailyBackup() {
+  let db;
+  try {
+    db = await openBgSyncDB();
+    const pending = await idbGet(db, 'dailyBackupPayload');
+    if (!pending || !pending.creds) {
+      console.log('[SW] Daily backup: no data snapshot available yet — skipping.');
+      return;
+    }
+
+    const { creds, data, version } = pending;
+    if (!creds.clientId || !creds.clientSecret || !creds.refreshToken) {
+      console.warn('[SW] Daily backup: missing OAuth credentials — skipping.');
+      return;
+    }
+
+    // ── 1. Fresh access token from the stored refresh token ──
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        refresh_token: creds.refreshToken,
+        client_id:     creds.clientId,
+        client_secret: creds.clientSecret,
+      }).toString(),
+    });
+    const tokenData = await tokenResp.json();
+    if (tokenData.error) {
+      throw new Error(tokenData.error_description || tokenData.error);
+    }
+    const token = tokenData.access_token;
+
+    // ── 2. Resolve the dedicated folder ──
+    const folderId = await resolveDailyBackupFolder(token, db);
+
+    // ── 3. Is the newest backup already less than 24 hours old? ──
+    const q = encodeURIComponent(
+      `'${folderId}' in parents and trashed=false and name contains 'farm-wage-backup-'`
+    );
+    const listResp = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=1&fields=files(id,name,createdTime,modifiedTime)`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const list = await listResp.json().catch(() => ({}));
+    if (!listResp.ok || list.error) {
+      throw new Error(list.error?.message || `Drive search failed (HTTP ${listResp.status})`);
+    }
+    const latest = list.files && list.files[0];
+    if (latest && latest.createdTime) {
+      const latestMs = Date.parse(latest.createdTime);
+      if (Number.isFinite(latestMs)) {
+        await idbPut(db, 'lastDailyBackupTime', latest.createdTime);
+        if (Date.now() - latestMs < DAILY_BACKUP_INTERVAL_MS) {
+          console.log('[SW] Daily backup skipped — latest backup is under 24 hours old.');
+          return;
+        }
+      }
+    }
+
+    // ── 4. Build and upload the timestamped snapshot ──
+    const payload = JSON.stringify({
+      ...data,
+      exportDate: new Date().toISOString(),
+      version: version || CACHE_VERSION,
+      backupType: 'daily-auto',
+    }, null, 2);
+
+    const metadata = {
+      name: swDailyBackupFileName(),
+      mimeType: 'application/json',
+      parents: [folderId],
+      description: 'Automatic daily backup created by Farm Manager',
+    };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([payload], { type: 'application/json' }));
+
+    const upResp = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,createdTime',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+    );
+    const created = await upResp.json().catch(() => ({}));
+    if (!upResp.ok || created.error) {
+      throw new Error(created.error?.message || `Backup upload failed (HTTP ${upResp.status})`);
+    }
+
+    const backupTime = created.createdTime || new Date().toISOString();
+    await idbPut(db, 'lastDailyBackupTime', backupTime);
+    await idbPut(db, 'dailyBackupFolderId', folderId);
+    console.log('[SW] Daily backup uploaded:', created.name, backupTime);
+
+    await notifyDailyBackupClients({
+      type: 'DAILY_BACKUP_COMPLETE',
+      backupTime,
+      folderId,
+      fileName: created.name,
+    });
+
+  } catch (err) {
+    console.error('[SW] Daily backup FAILED:', err.message);
+    await notifyDailyBackupClients({ type: 'DAILY_BACKUP_ERROR', error: err.message });
   }
 }
 

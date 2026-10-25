@@ -1440,6 +1440,15 @@ function FarmWageManager() {
   const [gcpSyncNote, setGcpSyncNote] = useState('');   // informational (non-error) messages
   const [gcpPullStatus, setGcpPullStatus] = useState('idle'); // 'idle'|'pulling'|'success'|'error'
   const [gcpPullError, setGcpPullError] = useState('');
+  // ── Automatic Daily Google Drive Backup state ────────────────────────────
+  const [dailyBackupEnabled, setDailyBackupEnabled] = useLocalStorage('dailyBackupEnabled', true);
+  const [lastDailyBackupTime, setLastDailyBackupTime] = useLocalStorage('lastDailyBackupTime', '');
+  const [dailyBackupFolderId, setDailyBackupFolderId] = useLocalStorage('dailyBackupFolderId', '');
+  const [dailyBackupStatus, setDailyBackupStatus] = useState('idle'); // 'idle'|'checking'|'backing-up'|'success'|'error'|'disabled'
+  const [dailyBackupError, setDailyBackupError] = useState('');
+  const dailyBackupLockRef = React.useRef(false);
+  const lastDailyBackupTimeRef = React.useRef(lastDailyBackupTime);
+  const dailyBackupFolderIdRef = React.useRef(dailyBackupFolderId);
   // Refs to always hold latest values inside debounced callbacks
   const gcpSyncDataRef = React.useRef({});
   const gcpCredsRef = React.useRef({});
@@ -1456,7 +1465,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.5.1';
+  const APP_VERSION = '5.6.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1550,6 +1559,24 @@ function FarmWageManager() {
       } else if (event.data.type === 'BG_SYNC_ERROR') {
         console.warn('[App] Background sync error (SW reported):', event.data.error);
         // Don't surface an error toast here — the SW will retry automatically
+      } else if (event.data.type === 'DAILY_BACKUP_COMPLETE') {
+        const { backupTime, folderId } = event.data;
+        if (backupTime) {
+          setLastDailyBackupTime(backupTime);
+          lastDailyBackupTimeRef.current = backupTime;
+        }
+        if (folderId) {
+          setDailyBackupFolderId(folderId);
+          dailyBackupFolderIdRef.current = folderId;
+        }
+        setDailyBackupStatus('success');
+        setDailyBackupError('');
+        setTimeout(() => setDailyBackupStatus(s => s === 'success' ? 'idle' : s), 4000);
+        console.log('[App] Daily backup completed in background (SW reported):', backupTime);
+      } else if (event.data.type === 'DAILY_BACKUP_ERROR') {
+        console.warn('[App] Daily backup error (SW reported):', event.data.error);
+        setDailyBackupStatus('error');
+        setDailyBackupError(event.data.error || 'Background backup failed');
       }
     };
     navigator.serviceWorker.addEventListener('message', onSwMessage);
@@ -2565,7 +2592,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.5.1'
+      version: '5.6.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2874,7 +2901,7 @@ setLivingExpenses(migrated.livingExpenses);
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.5.1'
+        version: '5.6.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -3155,7 +3182,7 @@ setLivingExpenses(migrated.livingExpenses);
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.5.1',
+        version:  '5.6.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3295,7 +3322,7 @@ setLivingExpenses(migrated.livingExpenses);
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.5.1'
+      version: '5.6.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3556,6 +3583,17 @@ setLivingExpenses(migrated.livingExpenses);
     setGcpSyncFileId('');
     gcpFileIdRef.current = '';
     clearPendingSyncData();   // ← BUG-05 fix: prevent SW from syncing with stale credentials
+
+    // Stop any scheduled daily backups and remove the background snapshot so
+    // the service worker cannot keep uploading with the old credentials.
+    setLastDailyBackupTime('');
+    lastDailyBackupTimeRef.current = '';
+    setDailyBackupFolderId('');
+    dailyBackupFolderIdRef.current = '';
+    setDailyBackupStatus(dailyBackupEnabled ? 'idle' : 'disabled');
+    setDailyBackupError('');
+    unregisterDailyBackupPeriodicSync();
+    clearDailyBackupSnapshot();
   };
 
   // Manual sync trigger
@@ -3712,9 +3750,373 @@ setLivingExpenses(migrated.livingExpenses);
     }
   };
 
+  // ── Automatic Daily Google Drive Backup ──────────────────────────────────
+  // Every 24 hours the app writes a timestamped JSON snapshot into the
+  // "Farm Manager Daily Backup" folder on Google Drive. The check compares the
+  // latest file already in that folder, so it also works across devices.
+
+  const DAILY_BACKUP_FOLDER_NAME = 'Farm Manager Daily Backup';
+  const DAILY_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Local-time timestamp safe for Drive file names, e.g. 2026-10-25_14-30-05
+  const dailyBackupFileName = (date = new Date()) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `farm-wage-backup-${formatLocalDate(date)}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.json`;
+  };
+
+  // Small helper — authenticated Drive JSON request with consistent errors
+  const driveFetchJson = async (url, token, options = {}) => {
+    const resp = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(options.headers || {}),
+      },
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.error) {
+      throw new Error(data.error?.message || `Drive request failed (HTTP ${resp.status})`);
+    }
+    return data;
+  };
+
+  // Find (or create) the dedicated daily-backup folder on Drive.
+  // The drive.file scope only exposes files this app created, which is exactly
+  // what we need here.
+  const resolveDailyBackupFolder = async (token) => {
+    const cachedId = dailyBackupFolderIdRef.current;
+    if (cachedId) {
+      try {
+        const meta = await driveFetchJson(
+          `https://www.googleapis.com/drive/v3/files/${cachedId}?fields=id,trashed,mimeType`,
+          token
+        );
+        if (!meta.trashed && meta.mimeType === 'application/vnd.google-apps.folder') {
+          return cachedId;
+        }
+      } catch (_) { /* stale / deleted / different account — fall through */ }
+      setDailyBackupFolderId('');
+      dailyBackupFolderIdRef.current = '';
+    }
+
+    const q = encodeURIComponent(
+      `name='${DAILY_BACKUP_FOLDER_NAME.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    );
+    const found = await driveFetchJson(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`,
+      token
+    );
+    if (found.files && found.files.length > 0) {
+      const id = found.files[0].id;
+      setDailyBackupFolderId(id);
+      dailyBackupFolderIdRef.current = id;
+      return id;
+    }
+
+    const created = await driveFetchJson(
+      'https://www.googleapis.com/drive/v3/files?fields=id',
+      token,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: DAILY_BACKUP_FOLDER_NAME,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: ['root'],
+        }),
+      }
+    );
+    setDailyBackupFolderId(created.id);
+    dailyBackupFolderIdRef.current = created.id;
+    return created.id;
+  };
+
+  // Latest timestamped backup currently inside the folder (null if none)
+  const getLatestDailyBackup = async (token, folderId) => {
+    const q = encodeURIComponent(
+      `'${folderId}' in parents and trashed=false and name contains 'farm-wage-backup-'`
+    );
+    const data = await driveFetchJson(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&pageSize=1&fields=files(id,name,createdTime,modifiedTime)`,
+      token
+    );
+    return (data.files && data.files[0]) || null;
+  };
+
+  // Upload a new timestamped snapshot into the daily-backup folder
+  const uploadDailyBackup = async (token, folderId) => {
+    const payload = JSON.stringify({
+      ...gcpSyncDataRef.current,
+      exportDate: new Date().toISOString(),
+      version: '5.6.0',
+      backupType: 'daily-auto',
+    }, null, 2);
+
+    const metadata = {
+      name: dailyBackupFileName(),
+      mimeType: 'application/json',
+      parents: [folderId],
+      description: 'Automatic daily backup created by Farm Manager',
+    };
+
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([payload], { type: 'application/json' }));
+
+    const resp = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,createdTime',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      }
+    );
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.error) {
+      throw new Error(data.error?.message || `Backup upload failed (HTTP ${resp.status})`);
+    }
+    return data;
+  };
+
+  // Persist the daily-backup metadata into IndexedDB so the service worker can
+  // compare timestamps and continue the schedule while the app is closed.
+  const persistDailyBackupMeta = async (backupTime, folderId) => {
+    try {
+      const db = await openBgSyncDB();
+      if (backupTime) await bgIdbPut(db, 'lastDailyBackupTime', backupTime);
+      if (folderId) await bgIdbPut(db, 'dailyBackupFolderId', folderId);
+    } catch (e) {
+      console.warn('[Daily Backup] Could not persist metadata:', e.message);
+    }
+  };
+
+  // Keep a fresh snapshot of app data + credentials in IndexedDB. This is the
+  // payload the service worker uploads when it runs the daily backup in the
+  // background (for example while every app tab is closed).
+  const persistDailyBackupSnapshot = async () => {
+    try {
+      const creds = gcpCredsRef.current;
+      if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) return;
+      const db = await openBgSyncDB();
+      await bgIdbPut(db, 'dailyBackupPayload', {
+        creds: { ...creds },
+        data: { ...gcpSyncDataRef.current },
+        version: '5.6.0',
+        queuedAt: new Date().toISOString(),
+      });
+      if (dailyBackupFolderIdRef.current) {
+        await bgIdbPut(db, 'dailyBackupFolderId', dailyBackupFolderIdRef.current);
+      }
+    } catch (e) {
+      console.warn('[Daily Backup] Could not store background snapshot:', e.message);
+    }
+  };
+
+  // Remove the background snapshot so the service worker cannot run a backup
+  // after the user disables the feature or disconnects Google.
+  const clearDailyBackupSnapshot = async () => {
+    try {
+      const db = await openBgSyncDB();
+      await bgIdbDel(db, 'dailyBackupPayload');
+      await bgIdbDel(db, 'lastDailyBackupTime');
+    } catch (_) { /* no-op */ }
+  };
+
+  // Ask the browser to wake the service worker once a day. Supported on
+  // Chromium-based browsers for installed PWAs; silently ignored elsewhere.
+  const registerDailyBackupPeriodicSync = async () => {
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      const reg = await navigator.serviceWorker.ready;
+      if (!('periodicSync' in reg)) return;
+      try {
+        const permission = await navigator.permissions.query({ name: 'periodic-background-sync' });
+        if (permission && permission.state === 'denied') return;
+      } catch (_) { /* permission name unsupported — try registering anyway */ }
+      await reg.periodicSync.register('farm-manager-daily-backup', {
+        minInterval: DAILY_BACKUP_INTERVAL_MS,
+      });
+      console.log('[Daily Backup] Periodic background sync registered.');
+    } catch (e) {
+      // Not fatal — the in-app scheduler still runs whenever the app is open.
+      console.warn('[Daily Backup] Periodic sync unavailable:', e.message);
+    }
+  };
+
+  const unregisterDailyBackupPeriodicSync = async () => {
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      const reg = await navigator.serviceWorker.ready;
+      if (!('periodicSync' in reg)) return;
+      await reg.periodicSync.unregister('farm-manager-daily-backup');
+    } catch (_) { /* no-op */ }
+  };
+
+  /**
+   * Run the daily backup check/upload.
+   * - automatic: silently checks the folder and uploads only if the newest
+   *   backup is more than 24 hours old.
+   * - manual: always uploads a fresh timestamped snapshot.
+   */
+  const runDailyBackup = async ({ manual = false } = {}) => {
+    if (!manual && !dailyBackupEnabled) return { skipped: true };
+    if (dailyBackupLockRef.current) return { skipped: true };
+
+    const creds = gcpCredsRef.current;
+    if (!creds.clientId || !creds.clientSecret || !creds.refreshToken) return { skipped: true };
+    if (!navigator.onLine) return { skipped: true };
+
+    dailyBackupLockRef.current = true;
+    setDailyBackupStatus('checking');
+    setDailyBackupError('');
+
+    const perform = async (token) => {
+      const folderId = await resolveDailyBackupFolder(token);
+      const latest = await getLatestDailyBackup(token, folderId);
+
+      if (latest && latest.createdTime) {
+        const latestMs = Date.parse(latest.createdTime);
+        if (Number.isFinite(latestMs)) {
+          // Keep local + IDB timestamps aligned with what is actually on Drive.
+          if (!lastDailyBackupTimeRef.current || latest.createdTime > lastDailyBackupTimeRef.current) {
+            setLastDailyBackupTime(latest.createdTime);
+            lastDailyBackupTimeRef.current = latest.createdTime;
+            persistDailyBackupMeta(latest.createdTime, folderId);
+          }
+          if (!manual && Date.now() - latestMs < DAILY_BACKUP_INTERVAL_MS) {
+            return { skipped: true, latest, folderId };
+          }
+        }
+      }
+
+      setDailyBackupStatus('backing-up');
+      const uploaded = await uploadDailyBackup(token, folderId);
+      const backupTime = uploaded.createdTime || new Date().toISOString();
+      setLastDailyBackupTime(backupTime);
+      lastDailyBackupTimeRef.current = backupTime;
+      persistDailyBackupMeta(backupTime, folderId);
+      return { uploaded, folderId, backupTime };
+    };
+
+    try {
+      let token = await gcpGetToken();
+      let result;
+      try {
+        result = await perform(token);
+      } catch (err) {
+        // Access token may have expired while idle — refresh once and retry.
+        if (/401|403|invalid credentials|invalid_grant|token/i.test(err.message || '')) {
+          token = await gcpRefreshTokenFn(creds.refreshToken);
+          setGcpAccessToken(token);
+          gcpAccessTokenRef.current = token;
+          result = await perform(token);
+        } else {
+          throw err;
+        }
+      }
+
+      if (result.skipped) {
+        setDailyBackupStatus('idle');
+        return result;
+      }
+
+      setDailyBackupStatus('success');
+      setTimeout(() => setDailyBackupStatus(s => s === 'success' ? 'idle' : s), 4000);
+      if (manual) {
+        alert(`Daily backup saved to Google Drive folder "${DAILY_BACKUP_FOLDER_NAME}".\n\nFile: ${result.uploaded.name}`);
+      }
+      return result;
+    } catch (err) {
+      console.error('[Daily Backup] Failed:', err);
+      setDailyBackupStatus('error');
+      setDailyBackupError(err.message);
+      // Automatic runs stay silent — only manual runs surface an alert.
+      if (manual) alert('Daily backup failed: ' + err.message);
+      return { error: err };
+    } finally {
+      dailyBackupLockRef.current = false;
+    }
+  };
+
+  const toggleDailyBackup = (enabled) => {
+    setDailyBackupEnabled(enabled);
+    setDailyBackupError('');
+    if (enabled) {
+      setDailyBackupStatus('idle');
+      registerDailyBackupPeriodicSync();
+      // The scheduling effect below also runs on this state change and will
+      // perform the first check silently after the app settles.
+    } else {
+      setDailyBackupStatus('disabled');
+      unregisterDailyBackupPeriodicSync();
+      clearDailyBackupSnapshot();
+    }
+  };
+
+  // Keep the refs used by timers / async callbacks in sync with state.
+  React.useEffect(() => { lastDailyBackupTimeRef.current = lastDailyBackupTime; }, [lastDailyBackupTime]);
+  React.useEffect(() => { dailyBackupFolderIdRef.current = dailyBackupFolderId; }, [dailyBackupFolderId]);
+
+  // Apply metadata written by the service worker while the app was closed.
+  React.useEffect(() => {
+    let cancelled = false;
+    openBgSyncDB()
+      .then(db => Promise.all([
+        bgIdbGet(db, 'lastDailyBackupTime'),
+        bgIdbGet(db, 'dailyBackupFolderId'),
+      ]))
+      .then(([bgBackupTime, bgFolderId]) => {
+        if (cancelled) return;
+        if (bgBackupTime && (!lastDailyBackupTimeRef.current || bgBackupTime > lastDailyBackupTimeRef.current)) {
+          setLastDailyBackupTime(bgBackupTime);
+          lastDailyBackupTimeRef.current = bgBackupTime;
+        }
+        if (bgFolderId && !dailyBackupFolderIdRef.current) {
+          setDailyBackupFolderId(bgFolderId);
+          dailyBackupFolderIdRef.current = bgFolderId;
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line
+
+  // Background scheduling: register the periodic sync and silently check the
+  // latest Drive backup on launch, hourly, and whenever connectivity returns.
+  React.useEffect(() => {
+    if (!dailyBackupEnabled) {
+      unregisterDailyBackupPeriodicSync();
+      return;
+    }
+    if (!gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
+
+    registerDailyBackupPeriodicSync();
+    let cancelled = false;
+    const check = () => {
+      if (!cancelled && navigator.onLine) runDailyBackup({ manual: false });
+    };
+    // Small delay so the app finishes mounting and loads its local data first.
+    const initialTimer = setTimeout(check, 5000);
+    const hourlyTimer = setInterval(check, 60 * 60 * 1000);
+    const onOnline = () => setTimeout(check, 2000);
+    window.addEventListener('online', onOnline);
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(hourlyTimer);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [dailyBackupEnabled, gcpRefreshToken, gcpClientId, gcpClientSecret]); // eslint-disable-line
+
+  // Keep the IndexedDB snapshot current so a service-worker-driven backup always
+  // contains the latest app data. Debounced to avoid writing on every keystroke.
+  React.useEffect(() => {
+    if (!dailyBackupEnabled || !gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
+    const timer = setTimeout(() => persistDailyBackupSnapshot(), 2500);
+    return () => clearTimeout(timer);
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, dailyBackupEnabled, gcpRefreshToken, gcpClientId, gcpClientSecret]); // eslint-disable-line
+
   // Format last sync time for display
-  const formatSyncTime = (isoStr) => {
-    if (!isoStr) return 'Never';
+  const formatSyncTime = (isoStr) => {    if (!isoStr) return 'Never';
     try {
       const d = new Date(isoStr);
       return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -11221,6 +11623,102 @@ setLivingExpenses(migrated.livingExpenses);
                 Syncing to <strong>farm-manager-sync.json</strong> in your Google Drive. This file is compatible with the Backup &amp; Restore feature.
               </div>
             )}
+
+            {/* ── Automatic Daily Backup ── */}
+            <div style={{ marginTop: '16px', padding: '14px', background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'rgba(15,157,88,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f9d58', flexShrink: 0 }}>
+                    <span style={{ width: '16px', height: '16px', display: 'inline-flex' }}>{Icons.save}</span>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-1)' }}>Automatic Daily Backup</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', lineHeight: '1.4' }}>
+                      Saves a timestamped backup to <strong>{DAILY_BACKUP_FOLDER_NAME}</strong> when the latest one is 24 hours old.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={dailyBackupEnabled}
+                  aria-label="Enable automatic daily backup"
+                  onClick={() => toggleDailyBackup(!dailyBackupEnabled)}
+                  style={{
+                    width: '44px', height: '25px', borderRadius: '999px', border: 'none',
+                    background: dailyBackupEnabled ? '#0f9d58' : 'var(--border)',
+                    position: 'relative', cursor: 'pointer', flexShrink: 0,
+                    transition: 'background 0.15s'
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px', left: dailyBackupEnabled ? '22px' : '3px',
+                    width: '19px', height: '19px', borderRadius: '50%', background: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s'
+                  }} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '12px', padding: '9px 11px', background: 'var(--card)', borderRadius: '9px', border: '1px solid var(--border)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                      background: !dailyBackupEnabled ? '#94a3b8'
+                        : dailyBackupStatus === 'backing-up' || dailyBackupStatus === 'checking' ? '#f59e0b'
+                        : dailyBackupStatus === 'error' ? '#ef4444'
+                        : dailyBackupStatus === 'success' ? '#22c55e'
+                        : lastDailyBackupTime ? '#22c55e' : '#94a3b8',
+                    }} />
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-1)' }}>
+                      {!dailyBackupEnabled ? 'Automatic backup off'
+                        : dailyBackupStatus === 'checking' ? 'Checking latest backup on Drive…'
+                        : dailyBackupStatus === 'backing-up' ? 'Uploading daily backup…'
+                        : dailyBackupStatus === 'success' ? 'Backup saved successfully'
+                        : dailyBackupStatus === 'error' ? 'Backup failed'
+                        : lastDailyBackupTime ? `Last backup: ${formatSyncTime(lastDailyBackupTime)}`
+                        : 'No backup yet — will run automatically'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '2px', paddingLeft: '14px' }}>
+                    {dailyBackupEnabled ? 'Runs silently in the background. No sign-in needed.' : 'Turn on to resume automatic daily backups.'}
+                  </div>
+                </div>
+                {dailyBackupFolderId && gcpRefreshToken && (
+                  <a
+                    href={`https://drive.google.com/drive/folders/${dailyBackupFolderId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: '11px', fontWeight: '700', color: '#0f9d58', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  >
+                    Open folder ↗
+                  </a>
+                )}
+              </div>
+
+              {dailyBackupStatus === 'error' && dailyBackupError && (
+                <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fee2e2', borderRadius: '8px', fontSize: '11px', color: '#991b1b', lineHeight: '1.5' }}>
+                  {dailyBackupError}
+                </div>
+              )}
+
+              <button
+                onClick={() => runDailyBackup({ manual: true })}
+                disabled={!gcpRefreshToken || !isOnline || dailyBackupStatus === 'checking' || dailyBackupStatus === 'backing-up'}
+                title={!gcpRefreshToken ? 'Sign in with Google first' : !isOnline ? 'Offline — backup will run automatically on reconnect' : 'Create a new timestamped daily backup now'}
+                style={{
+                  width: '100%', marginTop: '9px', padding: '9px', borderRadius: '9px',
+                  border: '1.5px solid var(--border)',
+                  background: 'var(--card)',
+                  color: gcpRefreshToken && isOnline ? '#0f9d58' : 'var(--text-3)',
+                  fontSize: '12px', fontWeight: '700',
+                  cursor: gcpRefreshToken && isOnline && dailyBackupStatus !== 'checking' && dailyBackupStatus !== 'backing-up' ? 'pointer' : 'not-allowed',
+                  opacity: !gcpRefreshToken || !isOnline ? 0.55 : 1,
+                }}
+              >
+                {dailyBackupStatus === 'checking' ? 'Checking…' : dailyBackupStatus === 'backing-up' ? 'Backing up…' : 'Back up now'}
+              </button>
+            </div>
           </div>
 
           {/* Data Management */}
@@ -11644,7 +12142,7 @@ setLivingExpenses(migrated.livingExpenses);
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.5.1
+              Version 5.6.0
             </p>
           </div>
         </div>
@@ -11669,11 +12167,12 @@ setLivingExpenses(migrated.livingExpenses);
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.5.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.5.1',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.5.1',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Background Sync Payload',       value: '5.5.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.5.1',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.6.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.6.0',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.6.0',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Daily Backup Payload',          value: '5.6.0',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
+                { label: 'Background Sync Payload',       value: '5.6.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.6.0',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -11688,10 +12187,10 @@ setLivingExpenses(migrated.livingExpenses);
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.5.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.5.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.5.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.5.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.6.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.6.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.6.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.6.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
