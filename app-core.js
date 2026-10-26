@@ -1465,7 +1465,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.6.0';
+  const APP_VERSION = '5.6.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -2407,34 +2407,6 @@ function FarmWageManager() {
     return attendance.find(a => a.workerId === workerId && a.date === date);
   };
 
-  // Calculate statistics
-  const getStats = () => {
-    const today = formatLocalDate(new Date());
-    const todayAttendance = attendance.filter(a => a.date === today && (a.status === 'present' || a.status === 'half_day'));
-    
-    const currentDate = new Date();
-    const thisMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    const monthAttendance = attendance.filter(a => {
-      if (!a.date.startsWith(thisMonth)) return false;
-      const w = workers.find(wk => wk.id === a.workerId);
-      return w && w.active !== false;
-    });
-    
-    const totalPaid = monthAttendance.reduce((sum, a) => {
-      const worker = workers.find(w => w.id === a.workerId);
-      return sum + getAttendanceEarnings(worker, [a]);
-    }, 0);
-
-    return {
-      totalWorkers: workers.length,
-      presentToday: todayAttendance.length,
-      monthlyPaid: totalPaid,
-      avgDailyWage: workers.length > 0 
-        ? workers.reduce((sum, w) => sum + getEffectiveDailyWage(w, today), 0) / workers.length 
-        : 0
-    };
-  };
-
   // Calculate worker's earnings
   const getWorkerEarnings = (workerId, period = 'month', specificMonth = null) => {
     const periodDate = specificMonth 
@@ -2500,10 +2472,6 @@ function FarmWageManager() {
       finalBalance: C
     };
   };
-
-  // FIX #6: memoised — recalculates only when workers or attendance data changes,
-  // not on every sidebar toggle, modal open, or other unrelated state change.
-  const stats = useMemo(() => getStats(), [workers, attendance]);
 
   // Get week dates
   const getWeekDates = (date) => {
@@ -2592,7 +2560,7 @@ function FarmWageManager() {
       contacts,
       generalNotes,
       exportDate: new Date().toISOString(),
-      version: '5.6.0'
+      version: '5.6.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2901,7 +2869,7 @@ setLivingExpenses(migrated.livingExpenses);
         contacts,
         generalNotes,
         exportDate: new Date().toISOString(),
-        version: '5.6.0'
+        version: '5.6.1'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -3182,7 +3150,7 @@ setLivingExpenses(migrated.livingExpenses);
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.6.0',
+        version:  '5.6.1',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3322,7 +3290,7 @@ setLivingExpenses(migrated.livingExpenses);
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.6.0'
+      version: '5.6.1'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3848,7 +3816,7 @@ setLivingExpenses(migrated.livingExpenses);
     const payload = JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.6.0',
+      version: '5.6.1',
       backupType: 'daily-auto',
     }, null, 2);
 
@@ -3901,7 +3869,7 @@ setLivingExpenses(migrated.livingExpenses);
       await bgIdbPut(db, 'dailyBackupPayload', {
         creds: { ...creds },
         data: { ...gcpSyncDataRef.current },
-        version: '5.6.0',
+        version: '5.6.1',
         queuedAt: new Date().toISOString(),
       });
       if (dailyBackupFolderIdRef.current) {
@@ -4381,30 +4349,6 @@ setLivingExpenses(migrated.livingExpenses);
       {/* Dashboard View */}
       {activeView === 'dashboard' && (
         <div className="fm-page">
-          {/* Stats row */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: '16px',
-            marginBottom: '28px'
-          }}>
-            <div style={{ background: 'var(--navy)', borderRadius: '18px', padding: '20px', color: 'white', gridColumn: 'span 2' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Total Workers</div>
-              <div style={{ fontSize: '36px', fontWeight: '700', letterSpacing: '-1px', fontFamily: "'DM Mono', monospace", color: 'var(--teal)' }}>{stats.totalWorkers}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.9)', marginTop: '4px' }}>{stats.presentToday} present today</div>
-            </div>
-            <div style={{ background: 'var(--card)', borderRadius: '18px', padding: '20px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '6px' }}>Monthly Wages</div>
-              <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.5px', fontFamily: "'DM Mono', monospace", color: 'var(--text-1)' }}>₹{stats.monthlyPaid.toLocaleString('en-IN', {maximumFractionDigits:0})}</div>
-              <div style={{ fontSize: '11px', color: 'var(--success)', marginTop: '4px', fontWeight: '600' }}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.trending}</span> This month</div>
-            </div>
-            <div style={{ background: 'var(--card)', borderRadius: '18px', padding: '20px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '6px' }}>Avg Daily Wage</div>
-              <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.5px', fontFamily: "'DM Mono', monospace", color: 'var(--text-1)' }}>₹{stats.avgDailyWage.toLocaleString('en-IN', {maximumFractionDigits:0})}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500', marginTop: '4px', fontWeight: '500' }}>per worker</div>
-            </div>
-          </div>
-
           {/* Section label */}
           <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '14px' }}>Quick Actions</div>
 
@@ -4419,7 +4363,8 @@ setLivingExpenses(migrated.livingExpenses);
               <ActionButton icon={Icons.payments}     label="Payments"      onClick={() => setActiveView('payments')}    color="#f59e0b" />
               <ActionButton icon={Icons.notes}        label="Worker Notes"  onClick={() => setActiveView('notes')}       color="#8b5cf6" />
               <ActionButton icon={Icons.seasonal}     label="Seasonal Work" onClick={() => setActiveView('seasonal')}    color="#10b981" />
-              <ActionButton icon={Icons.expenses}     label="Expenses"      onClick={() => setActiveView('expenses')}    color="#ef4444" />
+              <ActionButton icon={Icons.expenses}     label="Farming Expenses" onClick={() => setActiveView('expenses')} color="#ef4444" />
+              <ActionButton icon={Icons.living}       label="Living Expenses" onClick={() => setActiveView('living')}    color="#0891b2" />
               <ActionButton icon={Icons.contract}     label="Project Works" onClick={() => setActiveView('contract')}    color="#ec4899" />
               <ActionButton icon={Icons.phonebook}    label="Phonebook"     onClick={() => setActiveView('phonebook')}   color="#14b8a6" />
               <ActionButton icon={Icons.reports}      label="Reports"       onClick={() => setActiveView('reports')}     color="#06b6d4" />
@@ -12142,7 +12087,7 @@ setLivingExpenses(migrated.livingExpenses);
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.6.0
+              Version 5.6.1
             </p>
           </div>
         </div>
@@ -12167,12 +12112,12 @@ setLivingExpenses(migrated.livingExpenses);
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.6.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.6.0',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.6.0',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Daily Backup Payload',          value: '5.6.0',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
-                { label: 'Background Sync Payload',       value: '5.6.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.6.0',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '5.6.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '5.6.1',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '5.6.1',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Daily Backup Payload',          value: '5.6.1',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
+                { label: 'Background Sync Payload',       value: '5.6.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '5.6.1',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -12187,10 +12132,10 @@ setLivingExpenses(migrated.livingExpenses);
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.6.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.6.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.6.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.6.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v5.6.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.6.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.6.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.6.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
