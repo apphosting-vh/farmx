@@ -141,6 +141,20 @@ const LIVING_CATEGORIES = [
   'Misc',
 ];
 
+// ── Income classifications ───────────────────────────────────────────────────
+// Offered in the Add Income modal dropdown and used by the Income tab to
+// group income entries by source.
+const INCOME_CATEGORIES = [
+  'Crop Sales',
+  'Milk Sales',
+  'Livestock',
+  'Subsidy',
+  'Rental Income',
+  'Loan / Credit',
+  'Adjustment',
+  'Other',
+];
+
 // ── SVG Icon Library ──────────────────────────────────────────────────────────
 // Minimalistic 24×24 stroke-based icons, strokeWidth=1.6, rounded caps/joins
 const Icons = {
@@ -1181,6 +1195,15 @@ function FarmWageManager() {
     notes: '',
   });
 
+  // Blank form values for the Income add/edit modal
+  const emptyIncomeForm = () => ({
+    title: '',
+    category: incomeCatList[0] || INCOME_CATEGORIES[0],
+    amount: '',
+    date: formatLocalDate(new Date()),
+    body: '',
+  });
+
   // FIX #9: computed once — never recalculates on re-renders
   const [todayDisplay] = useState(() =>
     new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -1193,14 +1216,23 @@ function FarmWageManager() {
   const [seasonalWorks, setSeasonalWorks] = useLocalStorage('farmSeasonalWorks', []);
   const [expenses, setExpenses] = useLocalStorage('farmExpenses', []);
   const [livingExpenses, setLivingExpenses] = useLocalStorage('farmLivingExpenses', []);
+  const [incomes, setIncomes] = useLocalStorage('farmIncomes', []);
   // Classifications offered in the Living Expenses dropdown — maintained from Settings
   const [livingCategories, setLivingCategories] = useLocalStorage('farmLivingCategories', LIVING_CATEGORIES);
+  // Classifications offered in the Income dropdown — maintained from Settings
+  const [incomeCategories, setIncomeCategories] = useLocalStorage('farmIncomeCategories', INCOME_CATEGORIES);
+  
   // Settings UI state for the classification manager
   const [newLivingCategory, setNewLivingCategory] = useState('');
   const [editingLivingCategory, setEditingLivingCategory] = useState(null);
   const [editingLivingCategoryValue, setEditingLivingCategoryValue] = useState('');
+  const [newIncomeCategory, setNewIncomeCategory] = useState('');
+  const [editingIncomeCategory, setEditingIncomeCategory] = useState(null);
+  const [editingIncomeCategoryValue, setEditingIncomeCategoryValue] = useState('');
+
   // Effective list — guards against a cleared/empty stored list
   const livingCatList = (livingCategories && livingCategories.length) ? livingCategories : LIVING_CATEGORIES;
+  const incomeCatList = (incomeCategories && incomeCategories.length) ? incomeCategories : INCOME_CATEGORIES;
   const [currentTheme, setCurrentTheme] = useLocalStorage('farmTheme', 'arctic');
   const theme = themes[currentTheme] || themes.arctic;
   const [showInactiveWorkers, setShowInactiveWorkers] = useState(false);
@@ -1275,6 +1307,14 @@ function FarmWageManager() {
   const [livingExpenseData, setLivingExpenseData] = useState(() => emptyLivingExpenseForm());
   const [livingFilterYear, setLivingFilterYear] = useState(new Date().getFullYear());
   const [collapsedLivingMonths, setCollapsedLivingMonths] = useState(new Set());
+  // Income state
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
+  const [showBalanceAdjustment, setShowBalanceAdjustment] = useState(false);
+  const [adjustmentData, setAdjustmentData] = useState({ amount: '', date: formatLocalDate(new Date()), notes: '' });
+  const [editingIncome, setEditingIncome] = useState(null);
+  const [incomeData, setIncomeData] = useState(() => emptyIncomeForm());
+  const [incomeFilterYear, setIncomeFilterYear] = useState(new Date().getFullYear());
+  const [collapsedIncomeMonths, setCollapsedIncomeMonths] = useState(new Set());
   const [notesFilterMonth, setNotesFilterMonth] = useState(() => {
     // Default to current month as a Date set to 1st
     const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d;
@@ -1465,7 +1505,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '5.6.1';
+  const APP_VERSION = '6.0.0';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -1944,6 +1984,54 @@ function FarmWageManager() {
     });
   };
 
+  // Income Management
+  const addIncomeFromModal = () => {
+    const title = (incomeData.title || '').trim();
+    const amount = parseFloat(incomeData.amount);
+
+    if (!title || !(amount > 0) || !incomeData.date) {
+      alert('Please fill in Title, Amount and Date');
+      return;
+    }
+
+    const category = incomeCatList.includes(incomeData.category)
+      ? incomeData.category
+      : (incomeCatList[0] || INCOME_CATEGORIES[0]);
+
+    if (editingIncome) {
+      setIncomes(incomes.map(inc =>
+        inc.id === editingIncome.id
+          ? { ...inc, title, amount, date: incomeData.date, category, body: incomeData.body || '' }
+          : inc
+      ));
+      setEditingIncome(null);
+    } else {
+      setIncomes([...incomes, {
+        id: Date.now(),
+        title,
+        amount,
+        date: incomeData.date,
+        category,
+        body: incomeData.body || '',
+        createdAt: new Date().toISOString(),
+      }]);
+    }
+
+    setIncomeData(emptyIncomeForm());
+    setShowIncomeModal(false);
+  };
+
+  const deleteIncome = (id) => {
+    setConfirmDialog({
+      show: true,
+      message: 'Sure, you want to Delete this income entry?',
+      onConfirm: () => {
+        setIncomes(incomes.filter(inc => inc.id !== id));
+        setConfirmDialog({ show: false, message: '', onConfirm: null });
+      }
+    });
+  };
+
   // Living Expense Classifications (maintained from Settings)
   const addLivingCategory = () => {
     const name = (newLivingCategory || '').trim();
@@ -1970,6 +2058,46 @@ function FarmWageManager() {
     }
     setEditingLivingCategory(null);
     setEditingLivingCategoryValue('');
+  };
+
+  const addIncomeCategory = () => {
+    const name = (newIncomeCategory || '').trim();
+    if (!name) { alert('Enter an income category name'); return; }
+    if (incomeCatList.some(c => c.toLowerCase() === name.toLowerCase())) {
+      alert('This income category already exists');
+      return;
+    }
+    setIncomeCategories([...incomeCatList, name]);
+    setNewIncomeCategory('');
+  };
+
+  const saveIncomeCategoryRename = (oldName) => {
+    const name = (editingIncomeCategoryValue || '').trim();
+    if (!name) { alert('Enter an income category name'); return; }
+    if (name !== oldName && incomeCatList.some(c => c.toLowerCase() === name.toLowerCase())) {
+      alert('This income category already exists');
+      return;
+    }
+    if (name !== oldName) {
+      setIncomeCategories(incomeCatList.map(c => (c === oldName ? name : c)));
+      setIncomes(incomes.map(inc => (inc.category === oldName ? { ...inc, category: name } : inc)));
+    }
+    setEditingIncomeCategory(null);
+    setEditingIncomeCategoryValue('');
+  };
+
+  const deleteIncomeCategory = (name) => {
+    setConfirmDialog({
+      show: true,
+      message: `Delete the income category "${name}"?\n\nIt will be removed from the dropdown. Entries already recorded with it keep their label.`,
+      onConfirm: () => {
+        const next = incomeCatList.filter(c => c !== name);
+        setIncomeCategories(next.length ? next : INCOME_CATEGORIES);
+        setEditingIncomeCategory(null);
+        setEditingIncomeCategoryValue('');
+        setConfirmDialog({ show: false, message: '', onConfirm: null });
+      }
+    });
   };
 
   const deleteLivingCategory = (name) => {
@@ -2559,8 +2687,10 @@ function FarmWageManager() {
       contractWorks,
       contacts,
       generalNotes,
+      incomes,
+      incomeCategories,
       exportDate: new Date().toISOString(),
-      version: '5.6.1'
+      version: '6.0.0'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -2705,6 +2835,16 @@ function FarmWageManager() {
     updatedAt: n.updatedAt ?? n.createdAt ?? new Date().toISOString(),
   });
 
+  const migrateIncome = (inc) => ({
+    id:        inc.id        ?? Date.now() + Math.random(),
+    title:     inc.title     ?? '',
+    amount:    typeof inc.amount === 'number' ? inc.amount : parseFloat(inc.amount) || 0,
+    date:      inc.date      ?? formatLocalDate(new Date()),
+    category:  inc.category  ?? INCOME_CATEGORIES[0],
+    body:      inc.body      ?? '',
+    createdAt: inc.createdAt ?? inc.date ?? new Date().toISOString(),
+  });
+
   // Apply all migrations to a raw parsed backup object
   const migrateBackup = (data) => ({
     workers:       (data.workers       || []).map(migrateWorker),
@@ -2717,9 +2857,13 @@ function FarmWageManager() {
     livingCategories: migrateLivingCategories(data.livingCategories).length
       ? migrateLivingCategories(data.livingCategories)
       : LIVING_CATEGORIES,
+    incomeCategories: migrateLivingCategories(data.incomeCategories).length
+      ? migrateLivingCategories(data.incomeCategories)
+      : INCOME_CATEGORIES,
     contractWorks: (data.contractWorks || []).map(migrateContractWork),
     contacts:      (data.contacts      || []).map(migrateContact),
     generalNotes:  (data.generalNotes  || []).map(migrateGeneralNote),
+    incomes:       (data.incomes       || []).map(migrateIncome),
   });
 
   // Restore data
@@ -2766,9 +2910,11 @@ function FarmWageManager() {
             setExpenses(migrated.expenses);
 setLivingExpenses(migrated.livingExpenses);
                   setLivingCategories(migrated.livingCategories);
+                  setIncomeCategories(migrated.incomeCategories);
             setContractWorks(migrated.contractWorks);
             setContacts(migrated.contacts);
             setGeneralNotes(migrated.generalNotes);
+            setIncomes(migrated.incomes);
             setConfirmDialog({ show: false, message: '', onConfirm: null });
             alert(`Restored successfully from v${backupVersion} backup.\n\nAll missing fields from older backups have been filled with safe defaults.`);
             event.target.value = '';
@@ -2868,8 +3014,10 @@ setLivingExpenses(migrated.livingExpenses);
         contractWorks,
         contacts,
         generalNotes,
+        incomes,
+        incomeCategories,
         exportDate: new Date().toISOString(),
-        version: '5.6.1'
+        version: '6.0.0'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -2984,9 +3132,11 @@ setLivingExpenses(migrated.livingExpenses);
                   setExpenses(migrated.expenses);
 setLivingExpenses(migrated.livingExpenses);
             setLivingCategories(migrated.livingCategories);
+            setIncomeCategories(migrated.incomeCategories);
                   setContractWorks(migrated.contractWorks);
                   setContacts(migrated.contacts);
                   setGeneralNotes(migrated.generalNotes);
+                  setIncomes(migrated.incomes);
                   setConfirmDialog({ show: false, message: '', onConfirm: null });
                   alert(`Restored successfully from v${backupVersion} backup (Google Drive).\n\nAll missing fields from older backups have been filled with safe defaults.`);
                 }
@@ -3016,7 +3166,7 @@ setLivingExpenses(migrated.livingExpenses);
   }, [gcpClientId, gcpClientSecret, gcpRefreshToken]);
 
   React.useEffect(() => {
-    gcpSyncDataRef.current = { workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes };
+    gcpSyncDataRef.current = { workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, incomes, incomeCategories };
     if (hasMountedDataRef.current) {
       // This is a real user edit — record local edit timestamp in localStorage
       // so the online-reconnect handler can compare it with lastSyncTime even after a page reload
@@ -3025,7 +3175,7 @@ setLivingExpenses(migrated.livingExpenses);
       lastEditTimeRef.current = now;
     }
     hasMountedDataRef.current = true;
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes]);
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, incomes, incomeCategories]);
 
   React.useEffect(() => { gcpFileIdRef.current = gcpSyncFileId; }, [gcpSyncFileId]);
   React.useEffect(() => { gcpAccessTokenRef.current = gcpAccessToken; }, [gcpAccessToken]);
@@ -3150,7 +3300,7 @@ setLivingExpenses(migrated.livingExpenses);
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '5.6.1',
+        version:  '6.0.0',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3290,7 +3440,7 @@ setLivingExpenses(migrated.livingExpenses);
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.6.1'
+      version: '6.0.0'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3414,7 +3564,7 @@ setLivingExpenses(migrated.livingExpenses);
     if (gcpRefreshToken && gcpClientId && gcpClientSecret) {
       triggerGcpSync();
     }
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes]); // eslint-disable-line
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, incomes, incomeCategories]); // eslint-disable-line
 
   // Handle OAuth popup callback — detect code in URL on load (runs in popup)
   React.useEffect(() => {
@@ -3667,6 +3817,7 @@ setLivingExpenses(migrated.livingExpenses);
         `Payments       : ${migrated.payments.length} records`,
         `Expenses       : ${migrated.expenses.length} records`,
         `Living Expenses : ${migrated.livingExpenses.length} records`,
+        `Income         : ${migrated.incomes.length} records`,
         `Classifications : ${migrated.livingCategories.length} items`,
         `Seasonal Works : ${migrated.seasonalWorks.length} records`,
         `Contract Works : ${migrated.contractWorks.length} records`,
@@ -3689,9 +3840,11 @@ setLivingExpenses(migrated.livingExpenses);
           setExpenses(migrated.expenses);
 setLivingExpenses(migrated.livingExpenses);
           setLivingCategories(migrated.livingCategories);
+          setIncomeCategories(migrated.incomeCategories);
           setContractWorks(migrated.contractWorks);
           setContacts(migrated.contacts);
           setGeneralNotes(migrated.generalNotes);
+          setIncomes(migrated.incomes);
           setConfirmDialog({ show: false, message: '', onConfirm: null });
           setGcpPullStatus('success');
           setTimeout(() => setGcpPullStatus(s => s === 'success' ? 'idle' : s), 3000);
@@ -3816,7 +3969,7 @@ setLivingExpenses(migrated.livingExpenses);
     const payload = JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '5.6.1',
+      version: '6.0.0',
       backupType: 'daily-auto',
     }, null, 2);
 
@@ -3869,7 +4022,7 @@ setLivingExpenses(migrated.livingExpenses);
       await bgIdbPut(db, 'dailyBackupPayload', {
         creds: { ...creds },
         data: { ...gcpSyncDataRef.current },
-        version: '5.6.1',
+        version: '6.0.0',
         queuedAt: new Date().toISOString(),
       });
       if (dailyBackupFolderIdRef.current) {
@@ -4081,7 +4234,7 @@ setLivingExpenses(migrated.livingExpenses);
     if (!dailyBackupEnabled || !gcpRefreshToken || !gcpClientId || !gcpClientSecret) return;
     const timer = setTimeout(() => persistDailyBackupSnapshot(), 2500);
     return () => clearTimeout(timer);
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, dailyBackupEnabled, gcpRefreshToken, gcpClientId, gcpClientSecret]); // eslint-disable-line
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, incomes, incomeCategories, dailyBackupEnabled, gcpRefreshToken, gcpClientId, gcpClientSecret]); // eslint-disable-line
 
   // Format last sync time for display
   const formatSyncTime = (isoStr) => {    if (!isoStr) return 'Never';
@@ -4105,9 +4258,10 @@ setLivingExpenses(migrated.livingExpenses);
     // All other (unknown) keys used by the app or browser extensions
     const knownKeys = new Set([
       'farmWorkers','farmAttendance','farmPayments','farmSpecialNotes',
-      'farmSeasonalWorks','farmExpenses','farmLivingExpenses','farmLivingCategories','farmContractWorks','farmPhonebook',
+      'farmSeasonalWorks','farmExpenses','farmLivingExpenses','farmLivingCategories','farmIncomeCategories','farmContractWorks','farmPhonebook',
       'farmGeneralNotes','farmTheme','googleClientId','googleApiKey',
-      'gcpClientId','gcpClientSecret','gcpRefreshToken','gcpSyncFileId','lastSyncTime','lastEditTime'
+      'gcpClientId','gcpClientSecret','gcpRefreshToken','gcpSyncFileId','lastSyncTime','lastEditTime',
+      'farmIncomes'
     ]);
     let otherBytes = 0;
     try {
@@ -4132,6 +4286,7 @@ setLivingExpenses(migrated.livingExpenses);
           { key: 'farmSeasonalWorks',label: 'Seasonal Works',icon: 'seasonal', bytes: kb('farmSeasonalWorks') },
           { key: 'farmExpenses',     label: 'Expenses',      icon: 'expenses', bytes: kb('farmExpenses') },
           { key: 'farmLivingExpenses', label: 'Living Expenses', icon: 'living', bytes: kb('farmLivingExpenses') },
+          { key: 'farmIncomes', label: 'Income', icon: 'trending', bytes: kb('farmIncomes') },
           { key: 'farmContractWorks',label: 'Project Works', icon: 'contract', bytes: kb('farmContractWorks') },
           { key: 'farmPhonebook',    label: 'Phonebook',     icon: 'phonebook', bytes: kb('farmPhonebook') },
           { key: 'farmGeneralNotes', label: 'General Notes', icon: 'generalnotes', bytes: kb('farmGeneralNotes') },
@@ -4143,6 +4298,7 @@ setLivingExpenses(migrated.livingExpenses);
         items: [
           { key: 'farmTheme',      label: 'Theme',             icon: 'palette', bytes: kb('farmTheme') },
           { key: 'farmLivingCategories', label: 'Living Classifications', icon: 'living', bytes: kb('farmLivingCategories') },
+          { key: 'farmIncomeCategories', label: 'Income Categories', icon: 'trending', bytes: kb('farmIncomeCategories') },
           { key: '_googleDrive',   label: 'Google Drive Config', icon: 'key', bytes: kb('googleClientId') + kb('googleApiKey') },
           { key: '_gcpSync',       label: 'Cloud Sync Config', icon: 'cloud',  bytes: kb('gcpClientId') + kb('gcpClientSecret') + kb('gcpRefreshToken') + kb('gcpSyncFileId') + kb('lastSyncTime') },
         ]
@@ -4166,13 +4322,13 @@ setLivingExpenses(migrated.livingExpenses);
   // Recompute whenever any stored data changes
   React.useEffect(() => {
     setStorageStats(computeStorageStats());
-  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, currentTheme, gcpRefreshToken, lastSyncTime]);
+  }, [workers, attendance, payments, specialNotes, seasonalWorks, expenses, livingExpenses, livingCategories, contractWorks, contacts, generalNotes, currentTheme, gcpRefreshToken, lastSyncTime, incomes, incomeCategories]);
 
   // Clear all data
   const clearAllData = () => {
     setConfirmDialog({
       show: true,
-      message: 'Sure, you want to Reset all data? This will delete all workers, attendance, payments, notes, seasonal work, expenses, living expenses, contract work and contacts. This cannot be undone.',
+      message: 'Sure, you want to Reset all data? This will delete all workers, attendance, payments, notes, seasonal work, expenses, living expenses, income, contract work and contacts. This cannot be undone.',
       onConfirm: () => {
         setWorkers([]);
         setAttendance([]);
@@ -4185,11 +4341,70 @@ setLivingExpenses(migrated.livingExpenses);
         setContractWorks([]);
         setContacts([]);
         setGeneralNotes([]);
+        setIncomes([]);
         setConfirmDialog({ show: false, message: '', onConfirm: null });
         alert('All data cleared successfully');
       }
     });
   };
+
+  // ── Income Balance ────────────────────────────────────────────────────────
+  // Scoped to the selected year (Jan 1 – Dec 31) to exactly match the
+  // Yearly Snapshot and the year summary card below.
+  const incomeBalance = useMemo(() => {
+    const yearOf = (dateStr) => {
+      const y = parseInt(String(dateStr || '').slice(0, 4), 10);
+      return Number.isFinite(y) ? y : null;
+    };
+
+    const totalIncome = (incomes || [])
+      .filter(inc => yearOf(inc.date) === incomeFilterYear)
+      .reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
+
+    // Worker deposits are money received (cash inflow)
+    const totalWorkerDeposits = (payments || [])
+      .filter(p => p.type === 'credit' && yearOf(p.date) === incomeFilterYear)
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+    const totalExpenses = (expenses || [])
+      .filter(e => yearOf(e.purchaseDate) === incomeFilterYear)
+      .reduce((s, e) => s + (Number(e.cost) || 0), 0);
+
+    const totalLiving = (livingExpenses || [])
+      .filter(le => yearOf(le.date) === incomeFilterYear)
+      .reduce((s, le) => s + (Number(le.amount) || 0), 0);
+
+    // Worker Payments (Cash out)
+    const totalWorkerPayments = (payments || [])
+      .filter(p => p.type !== 'credit' && yearOf(p.date) === incomeFilterYear)
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+    // Seasonal work cost = rate × totalConsumed
+    const totalSeasonal = (seasonalWorks || [])
+      .filter(sw => yearOf(sw.startDate) === incomeFilterYear)
+      .reduce((s, sw) => s + ((Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)), 0);
+
+    // Contract Costs = Total Project Cost (contractCost)
+    const totalContract = (contractWorks || [])
+      .filter(cw => yearOf(cw.date) === incomeFilterYear)
+      .reduce((s, cw) => s + (Number(cw.contractCost) || 0), 0);
+
+    const totalOutflow = totalExpenses + totalLiving + totalWorkerPayments + totalSeasonal + totalContract;
+    const totalInflow = totalIncome + totalWorkerDeposits;
+
+    return {
+      totalIncome,
+      totalWorkerDeposits,
+      totalExpenses,
+      totalLiving,
+      totalWorkerPayments,
+      totalSeasonal,
+      totalContract,
+      totalOutflow,
+      totalInflow,
+      currentBalance: totalInflow - totalOutflow,
+    };
+  }, [incomes, payments, expenses, livingExpenses, seasonalWorks, contractWorks, incomeFilterYear]);
 
   // Get report data for a specific month
   // Worker type (regular/seasonal) is purely indicational, so every active
@@ -4326,6 +4541,7 @@ setLivingExpenses(migrated.livingExpenses);
                activeView === 'seasonal' ? 'Seasonal Work' :
                activeView === 'expenses' ? 'Farming Expenses' :
                activeView === 'living' ? 'Living Expenses' :
+               activeView === 'income' ? 'Income' :
                activeView === 'contract' ? 'Project Works' :
                activeView === 'phonebook' ? 'Phonebook' :
                activeView === 'reports' ? 'Reports' :
@@ -4365,6 +4581,7 @@ setLivingExpenses(migrated.livingExpenses);
               <ActionButton icon={Icons.seasonal}     label="Seasonal Work" onClick={() => setActiveView('seasonal')}    color="#10b981" />
               <ActionButton icon={Icons.expenses}     label="Farming Expenses" onClick={() => setActiveView('expenses')} color="#ef4444" />
               <ActionButton icon={Icons.living}       label="Living Expenses" onClick={() => setActiveView('living')}    color="#0891b2" />
+              <ActionButton icon={Icons.trending}     label="Income"        onClick={() => setActiveView('income')}      color="#10b981" />
               <ActionButton icon={Icons.contract}     label="Project Works" onClick={() => setActiveView('contract')}    color="#ec4899" />
               <ActionButton icon={Icons.phonebook}    label="Phonebook"     onClick={() => setActiveView('phonebook')}   color="#14b8a6" />
               <ActionButton icon={Icons.reports}      label="Reports"       onClick={() => setActiveView('reports')}     color="#06b6d4" />
@@ -7321,6 +7538,258 @@ setLivingExpenses(migrated.livingExpenses);
         </div>
       )}
 
+      {/* Balance Adjustment Modal */}
+      {showBalanceAdjustment && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: 'var(--card)', borderRadius: '20px', padding: '24px', maxWidth: '400px', width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
+              Adjust Current Balance
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.5' }}>
+              Enter your actual physical balance. The system will automatically create a <strong>Balance Adjustment</strong> entry to reconcile the difference.
+            </p>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>New Balance (₹)</label>
+              <input type="number" value={adjustmentData.amount} onChange={(e) => setAdjustmentData({ ...adjustmentData, amount: e.target.value })} style={{ width: '100%', padding: '14px', border: '2px solid var(--border)', borderRadius: '12px', fontSize: '16px', fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)' }} />
+            </div>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>Date</label>
+              <input type="date" value={adjustmentData.date} onChange={(e) => setAdjustmentData({ ...adjustmentData, date: e.target.value })} max={formatLocalDate(new Date())} style={{ width: '100%', padding: '14px', border: '2px solid var(--border)', borderRadius: '12px', fontSize: '16px', fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)' }} />
+            </div>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>Notes / Reason</label>
+              <input type="text" value={adjustmentData.notes} onChange={(e) => setAdjustmentData({ ...adjustmentData, notes: e.target.value })} placeholder="e.g., Cash count mismatch" style={{ width: '100%', padding: '14px', border: '2px solid var(--border)', borderRadius: '12px', fontSize: '16px', fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)' }} />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setShowBalanceAdjustment(false)} style={{ flex: 1, padding: '14px', border: '1px solid var(--border)', background: 'var(--card)', borderRadius: '12px', fontSize: '15px', fontWeight: '600', color: 'var(--text-1)', cursor: 'pointer' }}>Cancel</button>
+              <button 
+                onClick={() => {
+                  const newBal = parseFloat(adjustmentData.amount);
+                  if (isNaN(newBal)) return;
+                  const diff = newBal - incomeBalance.currentBalance;
+                  
+                  if (diff !== 0) {
+                    setIncomes([...incomes, {
+                      id: Date.now(),
+                      title: adjustmentData.notes || 'Manual Balance Adjustment',
+                      amount: diff,
+                      date: adjustmentData.date,
+                      category: 'Adjustment',
+                      body: `Adjusted balance from ₹${incomeBalance.currentBalance} to ₹${newBal}`,
+                      createdAt: new Date().toISOString()
+                    }]);
+                  }
+                  setShowBalanceAdjustment(false);
+                }} 
+                style={{ flex: 1, padding: '14px', border: 'none', background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', borderRadius: '12px', fontSize: '15px', fontWeight: '600', color: 'white', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,201,167,0.3)' }}
+              >
+                Save Adjustment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Income Modal */}
+      {showIncomeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--card)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '440px',
+            width: '100%',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '18px', height: '18px', display: 'inline-flex', color: '#10b981' }}>{Icons.trending}</span>
+              {editingIncome ? 'Edit Income' : 'Add Income'}
+            </h3>
+
+            {/* Title */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>
+                Title *
+              </label>
+              <input
+                type="text"
+                value={incomeData.title}
+                onChange={(e) => setIncomeData({ ...incomeData, title: e.target.value })}
+                placeholder="e.g., Ragi harvest sale, Milk payment"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            {/* Category */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>
+                Income Category *
+              </label>
+              <select
+                value={incomeCatList.includes(incomeData.category) ? incomeData.category : (incomeCatList[0] || INCOME_CATEGORIES[0])}
+                onChange={(e) => setIncomeData({ ...incomeData, category: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              >
+                {incomeCatList.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Amount */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>
+                Amount (₹) *
+              </label>
+              <input
+                type="number"
+                value={incomeData.amount}
+                onChange={(e) => setIncomeData({ ...incomeData, amount: e.target.value })}
+                placeholder="Enter amount received"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            {/* Date */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>
+                Date *
+              </label>
+              <input
+                type="date"
+                value={incomeData.date}
+                onChange={(e) => setIncomeData({ ...incomeData, date: e.target.value })}
+                max={formatLocalDate(new Date())}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            {/* Body */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', marginBottom: '8px' }}>
+                Notes
+              </label>
+              <textarea
+                value={incomeData.body}
+                onChange={(e) => setIncomeData({ ...incomeData, body: e.target.value })}
+                placeholder="Free text notes about this income..."
+                rows="4"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  border: '2px solid var(--border)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  resize: 'vertical',
+                  background: 'var(--card)',
+                  color: 'var(--text-1)'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  setShowIncomeModal(false);
+                  setEditingIncome(null);
+                  setIncomeData(emptyIncomeForm());
+                }}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--card)',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'var(--text-1)',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addIncomeFromModal}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'white',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(16,185,129,0.3)'
+                }}
+              >
+                {editingIncome ? 'Update Income' : 'Add Income'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Contract Work Modal */}
       {showContractModal && (
         <div style={{
@@ -8820,6 +9289,347 @@ setLivingExpenses(migrated.livingExpenses);
                                 <div style={{ marginTop: '10px', padding: '8px 12px', background: '#fff9e6', borderRadius: '8px', border: '1px solid #ffd54f' }}>
                                   <div style={{ fontSize: '12px', color:'var(--text-2)', fontWeight:'700', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}><div style={{width:'12px',height:'12px'}}>{Icons.notes}</div>Notes</div>
                                   <div style={{ fontSize: '13px', color: '#4e342e', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{entry.notes}</div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Income View */}
+      {activeView === 'income' && !deferredReady && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'14px', padding:'80px 20px', color:'var(--text-3)' }}>
+          <div className="loading-spinner" style={{ width:'32px', height:'32px', borderColor:'rgba(16,185,129,0.2)', borderTopColor:'#10b981' }}></div>
+          <span style={{ fontSize:'13px', fontWeight:'500' }}>Loading Income…</span>
+        </div>
+      )}
+      {activeView === 'income' && deferredReady && (() => {
+        const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const accentColor = '#10b981';
+        const fmtAmount = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const yearEntries = incomes
+          .filter(inc => new Date(inc.date).getFullYear() === incomeFilterYear)
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const yearIncome = yearEntries.reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
+
+        const yearExpenses = (expenses || [])
+          .filter(e => new Date(e.purchaseDate).getFullYear() === incomeFilterYear)
+          .reduce((s, e) => s + (Number(e.cost) || 0), 0);
+        const yearLiving = (livingExpenses || [])
+          .filter(le => new Date(le.date).getFullYear() === incomeFilterYear)
+          .reduce((s, le) => s + (Number(le.amount) || 0), 0);
+        const yearOf = (dateStr) => {
+          const y = parseInt(String(dateStr || '').slice(0, 4), 10);
+          return Number.isFinite(y) ? y : null;
+        };
+
+        const yearWorkerDeposits = (payments || [])
+          .filter(p => p.type === 'credit' && yearOf(p.date) === incomeFilterYear)
+          .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+        const yearWorkerPayments = (payments || [])
+          .filter(p => p.type !== 'credit' && yearOf(p.date) === incomeFilterYear)
+          .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+        const yearSeasonal = (seasonalWorks || [])
+          .filter(sw => yearOf(sw.startDate) === incomeFilterYear)
+          .reduce((s, sw) => s + ((Number(sw.rate) || 0) * (Number(sw.totalConsumed) || 0)), 0);
+
+        const yearContract = (contractWorks || [])
+          .filter(cw => yearOf(cw.date) === incomeFilterYear)
+          .reduce((s, cw) => s + (Number(cw.contractCost) || 0), 0);
+
+        const yearOutflow = yearExpenses + yearLiving + yearWorkerPayments + yearSeasonal + yearContract;
+        const yearNet = yearIncome + yearWorkerDeposits - yearOutflow;
+
+        const monthGroups = {};
+        yearEntries.forEach(inc => {
+          const key = inc.date.slice(0, 7);
+          if (!monthGroups[key]) monthGroups[key] = [];
+          monthGroups[key].push(inc);
+        });
+        const monthKeys = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+
+        const toggleIncomeMonth = (key) => {
+          setCollapsedIncomeMonths(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+          });
+        };
+
+        const openIncomeModal = (entry) => {
+          setEditingIncome(entry);
+          setIncomeData(entry
+            ? { title: entry.title, category: entry.category || INCOME_CATEGORIES[0], amount: String(entry.amount ?? ''), date: entry.date, body: entry.body || '' }
+            : emptyIncomeForm()
+          );
+          setShowIncomeModal(true);
+        };
+
+        const breakdownCats = Array.from(new Set([
+          ...incomeCatList,
+          ...yearEntries.map(inc => inc.category || 'Other')
+        ]));
+        const categoryTotals = breakdownCats
+          .map(cat => {
+            const rows = yearEntries.filter(inc => (inc.category || 'Other') === cat);
+            return { cat, count: rows.length, total: rows.reduce((s, inc) => s + (Number(inc.amount) || 0), 0) };
+          })
+          .filter(c => c.count > 0)
+          .sort((a, b) => b.total - a.total);
+
+        return (
+          <div style={{ padding: '20px' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: 'var(--text-1)', display:'flex', alignItems:'center', gap:'8px' }}>
+                <div style={{width:'20px',height:'20px',color:accentColor}}>{Icons.trending}</div>
+                Income
+              </h2>
+              <button
+                onClick={() => { setEditingIncome(null); setIncomeData(emptyIncomeForm()); setShowIncomeModal(true); }}
+                style={{ background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', border: 'none', padding: '10px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '7px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', color: 'white', boxShadow: '0 2px 10px rgba(0,201,167,0.25)' }}
+              >
+                <div style={{width:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center'}}>{Icons.plus}</div>
+                Add Income
+              </button>
+            </div>
+
+            {/* Current Balance card */}
+            <div style={{
+              background: 'linear-gradient(135deg, var(--navy) 0%, #0b2447 100%)',
+              borderRadius: '16px',
+              padding: '20px',
+              color: 'white',
+              marginBottom: '16px',
+              boxShadow: '0 4px 20px rgba(13,31,60,0.18)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.75 }}>
+                  Current Balance
+                </div>
+                <button
+                  onClick={() => {
+                    setAdjustmentData({ amount: incomeBalance.currentBalance.toString(), date: formatLocalDate(new Date()), notes: '' });
+                    setShowBalanceAdjustment(true);
+                  }}
+                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px', padding: '3px 8px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: '700', transition: 'background 0.2s' }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+                >
+                  <div style={{ width: '12px', height: '12px' }}>{Icons.edit}</div>
+                  Edit
+                </button>
+              </div>
+              <div style={{ fontSize: '34px', fontWeight: '700', letterSpacing: '-0.5px', lineHeight: 1.15, color: incomeBalance.currentBalance >= 0 ? '#7df5d8' : '#ff9a9a' }}>
+                ₹{fmtAmount(incomeBalance.currentBalance)}
+              </div>
+              <div style={{ fontSize: '12px', marginTop: '8px', opacity: 0.85, lineHeight: '1.5' }}>
+                Total income plus worker deposits, minus all recorded outflows (farming expenses, living expenses, worker payments, seasonal work costs, contract costs).
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
+                marginTop: '16px',
+                paddingTop: '14px',
+                borderTop: '1px solid rgba(255,255,255,0.15)'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, marginBottom: '2px' }}>Total Income</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(incomeBalance.totalIncome)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, marginBottom: '2px' }}>Worker Deposits</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', fontFamily: "'DM Mono', monospace", color: '#4ade80' }}>+₹{fmtAmount(incomeBalance.totalWorkerDeposits)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, marginBottom: '2px' }}>Total Outflow</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(incomeBalance.totalOutflow)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Outflow breakdown chips */}
+            <div style={{
+              background: 'var(--card)',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              marginBottom: '20px',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px',
+              alignItems: 'center',
+              boxShadow: '0 1px 6px rgba(13,31,60,0.05)'
+            }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-2)', marginRight: '4px' }}>Outflows:</span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(231,76,60,0.08)', color: '#b91c1c', fontSize: '12px', fontWeight: '700' }}>
+                Farming Items Expenses ₹{fmtAmount(incomeBalance.totalExpenses)}
+              </span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(14,165,233,0.10)', color: '#0369a1', fontSize: '12px', fontWeight: '700' }}>
+                Living Expenses ₹{fmtAmount(incomeBalance.totalLiving)}
+              </span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(217,54,54,0.08)', color: '#991b1b', fontSize: '12px', fontWeight: '700' }}>
+                Worker Payments ₹{fmtAmount(incomeBalance.totalWorkerPayments)}
+              </span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(16,185,129,0.10)', color: '#047857', fontSize: '12px', fontWeight: '700' }}>
+                + Worker Deposits ₹{fmtAmount(incomeBalance.totalWorkerDeposits)}
+              </span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(243,156,18,0.10)', color: '#b45309', fontSize: '12px', fontWeight: '700' }}>
+                Seasonal Farming Expenses ₹{fmtAmount(incomeBalance.totalSeasonal)}
+              </span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', background: 'rgba(155,89,182,0.10)', color: '#6d28d9', fontSize: '12px', fontWeight: '700' }}>
+                Project Expenses ₹{fmtAmount(incomeBalance.totalContract)}
+              </span>
+            </div>
+
+            {/* Year Navigation */}
+            <div style={{ background: 'var(--card)', borderRadius: '14px', padding: '12px 16px', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button onClick={() => { setIncomeFilterYear(y => y - 1); setCollapsedIncomeMonths(new Set()); }} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', width: '34px', height: '34px', cursor: 'pointer', color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{width:'18px',height:'18px'}}>{Icons.chevronLeft}</div></button>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>{incomeFilterYear}</div>
+                <div style={{ fontSize: '12px', color: accentColor, fontWeight: '600', marginTop: '2px' }}>
+                  {yearEntries.length === 0
+                    ? 'No entries this year'
+                    : yearEntries.length + ' entr' + (yearEntries.length > 1 ? 'ies' : 'y') + ' · ₹' + fmtAmount(yearIncome)}
+                </div>
+              </div>
+              <button onClick={() => { setIncomeFilterYear(y => y + 1); setCollapsedIncomeMonths(new Set()); }} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', width: '34px', height: '34px', cursor: 'pointer', color: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{width:'18px',height:'18px'}}>{Icons.chevronRight}</div></button>
+            </div>
+
+            {/* Year summary card */}
+            {yearEntries.length > 0 && (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '16px 20px', marginBottom: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Income</div>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(yearIncome)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Deposits</div>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: '#10b981', fontFamily: "'DM Mono', monospace" }}>+₹{fmtAmount(yearWorkerDeposits)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Outflow</div>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(yearOutflow)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Net</div>
+                    <div style={{ fontSize: '18px', fontWeight: '700', color: yearNet >= 0 ? '#10b981' : '#ef4444', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(yearNet)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Category breakdown */}
+            {categoryTotals.length > 0 && (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '16px 20px', marginBottom: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: '12px' }}>By Category</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '8px' }}>
+                  {categoryTotals.map(c => (
+                    <div key={c.cat} style={{ background: 'var(--surface)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '600', marginBottom: '4px' }}>{c.cat}</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>₹{fmtAmount(c.total)}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{c.count} entr{c.count > 1 ? 'ies' : 'y'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Expand/Collapse all */}
+            {monthKeys.length > 1 && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setCollapsedIncomeMonths(new Set())} style={{ background: 'none', border: '2px solid ' + accentColor, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.expand}</span>All</span></button>
+                <button onClick={() => setCollapsedIncomeMonths(new Set(monthKeys))} style={{ background: 'none', border: '2px solid ' + accentColor, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', color: accentColor, cursor: 'pointer' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.collapse}</span>All</span></button>
+              </div>
+            )}
+
+            {/* Empty states */}
+            {incomes.length === 0 ? (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{width:'52px',height:'52px',margin:'0 auto 16px',color:accentColor,opacity:'0.45'}}>{Icons.trending}</div>
+                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Income Entries</h3>
+                <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Add your first income entry to start tracking your balance</p>
+              </div>
+            ) : yearEntries.length === 0 ? (
+              <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '60px 20px', textAlign: 'center', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', color: 'var(--text-3)' }}><span style={{width:'48px',height:'48px',display:'inline-flex'}}>{Icons.inbox}</span></div>
+                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-1)' }}>No Entries for {incomeFilterYear}</h3>
+                <p style={{ margin: 0, color: 'var(--text-1)', fontWeight: '500' }}>Use the arrows to browse other years</p>
+              </div>
+            ) : (
+              <div className="fm-list">
+                {monthKeys.map((key) => {
+                  const parts = key.split('-');
+                  const yr = parts[0];
+                  const mo = parts[1];
+                  const label = MONTH_NAMES[parseInt(mo) - 1] + ' ' + yr;
+                  const entries = monthGroups[key];
+                  const monthTotal = entries.reduce((s, inc) => s + (Number(inc.amount) || 0), 0);
+                  const collapsed = collapsedIncomeMonths.has(key);
+
+                  return (
+                    <div key={key} style={{ background: 'var(--card)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+                      <button
+                        onClick={() => toggleIncomeMonth(key)}
+                        style={{ width:'100%', padding:'13px 16px', border:'none', background: collapsed ? 'var(--card)' : 'var(--surface)', borderBottom: collapsed ? 'none' : '1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', textAlign:'left', borderRadius: collapsed ? '12px' : '12px 12px 0 0' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width:'18px', height:'18px', color: accentColor, display:'flex', alignItems:'center', justifyContent:'center', transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.22s ease' }}>{Icons.chevronRight}</div>
+                          <div>
+                            <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>{label}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--label)', marginTop: '2px', fontWeight: '500' }}>{entries.length} entr{entries.length > 1 ? 'ies' : 'y'}</div>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: accentColor }}>₹{fmtAmount(monthTotal)}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500' }}>total</div>
+                        </div>
+                      </button>
+
+                      {!collapsed && (
+                        <div style={{ padding: '12px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {entries.map(entry => (
+                            <div key={entry.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px', borderLeft: '4px solid ' + accentColor, position: 'relative' }}>
+                              <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => openIncomeModal(entry)}
+                                  style={{ background:'rgba(37,99,235,0.08)', color:'#2563eb', border:'1px solid rgba(37,99,235,0.2)', padding:'6px', borderRadius:'7px', cursor:'pointer', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center' }}
+                                ><div style={{width:'15px',height:'15px'}}>{Icons.edit}</div></button>
+                                <button onClick={() => deleteIncome(entry.id)} style={{ background:'rgba(220,38,38,0.08)', color:'var(--danger)', border:'1px solid rgba(220,38,38,0.2)', padding:'6px', borderRadius:'7px', cursor:'pointer', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center' }}><div style={{width:'15px',height:'15px'}}>{Icons.trash}</div></button>
+                              </div>
+                              <div style={{ paddingRight: '80px' }}>
+                                <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-1)', marginBottom: '5px' }}>{entry.title}</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-1)', fontWeight: '500', marginBottom: '6px' }}><span style={{display:'inline-flex',alignItems:'center',gap:'4px'}}><span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.calendar2}</span>{new Date(entry.date).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}</span></div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                                  <span style={{ display:'inline-flex', alignItems:'center', gap:'5px', padding:'4px 10px', background:'rgba(16,185,129,0.10)', border:'1px solid rgba(16,185,129,0.30)', borderRadius:'10px', fontSize:'12px', fontWeight:'700', color:'#047857' }}>
+                                    <span style={{width:'12px',height:'12px',display:'inline-flex'}}>{Icons.box}</span>
+                                    {entry.category || 'Other'}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'inline-block', padding: '8px 12px', background: '#d1fae5', borderRadius: '10px', border: '2px solid #6ee7b7' }}>
+                                  <div style={{ fontSize: '20px', fontWeight: '700', color: '#065f46', marginBottom: '1px' }}>₹{fmtAmount(entry.amount)}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-1)', fontWeight: '500' }}>amount received</div>
+                                </div>
+                              </div>
+                              {entry.body && (
+                                <div style={{ marginTop: '10px', padding: '8px 12px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
+                                  <div style={{ fontSize: '12px', color:'var(--text-2)', fontWeight:'700', marginBottom:'3px', display:'flex', alignItems:'center', gap:'4px' }}><div style={{width:'12px',height:'12px'}}>{Icons.notes}</div>Notes</div>
+                                  <div style={{ fontSize: '13px', color: '#064e3b', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{entry.body}</div>
                                 </div>
                               )}
                             </div>
@@ -11771,6 +12581,17 @@ setLivingExpenses(migrated.livingExpenses);
                 alignItems: 'center',
                 marginTop: '8px'
               }}>
+                <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Income Entries</span>
+                <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
+                  {incomes.length}
+                </span>
+              </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '8px'
+              }}>
                 <span style={{ fontSize: '14px', color: 'var(--text-1)', fontWeight: '500' }}>Contracts</span>
                 <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-1)' }}>
                   {contractWorks.length}
@@ -11934,6 +12755,62 @@ setLivingExpenses(migrated.livingExpenses);
             </div>
           </div>
 
+          {/* Income Categories */}
+          <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid var(--border)', boxShadow: '0 1px 6px rgba(13,31,60,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                <span style={{ width: '18px', height: '18px', display: 'inline-flex' }}>{Icons.trending}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-1)' }}>Income Categories</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '500' }}>Choices shown in the Income dropdown</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', margin: '16px 0 14px' }}>
+              <input
+                type="text"
+                value={newIncomeCategory}
+                onChange={(e) => setNewIncomeCategory(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addIncomeCategory(); }}
+                placeholder="e.g., Crop Insurance"
+                style={{ flex: 1, minWidth: 0, padding: '12px 14px', border: '2px solid var(--border)', borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)' }}
+              />
+              <button
+                onClick={addIncomeCategory}
+                style={{ padding: '12px 18px', border: 'none', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, var(--teal) 0%, var(--teal-dim) 100%)', color: 'white', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <span style={{ width: '14px', height: '14px', display: 'inline-flex' }}>{Icons.plus}</span>
+                Add
+              </button>
+            </div>
+
+            <div className="fm-list">
+              {incomeCatList.map(cat => {
+                const inUse = incomes.filter(inc => (inc.category || 'Other') === cat).length;
+                const isEditing = editingIncomeCategory === cat;
+                return (
+                  <div key={cat} style={{ padding: '12px 14px', background: 'var(--surface)', borderRadius: '10px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isEditing ? (
+                      <>
+                        <input type="text" value={editingIncomeCategoryValue} onChange={(e) => setEditingIncomeCategoryValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveIncomeCategoryRename(cat); if (e.key === 'Escape') { setEditingIncomeCategory(null); setEditingIncomeCategoryValue(''); } }} autoFocus style={{ flex: 1, minWidth: 0, padding: '9px 12px', border: '2px solid var(--teal)', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', background: 'var(--card)', color: 'var(--text-1)' }} />
+                        <button onClick={() => saveIncomeCategoryRename(cat)} title="Save" style={{ background: 'rgba(0,184,150,0.12)', color: '#0f9b8e', border: '1px solid rgba(0,184,150,0.3)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: '15px', height: '15px' }}>{Icons.check}</div></button>
+                        <button onClick={() => { setEditingIncomeCategory(null); setEditingIncomeCategoryValue(''); }} title="Cancel" style={{ background: 'var(--card)', color: 'var(--text-2)', border: '1px solid var(--border)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: '15px', height: '15px' }}>{Icons.x}</div></button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: '14px', fontWeight: '600', color: 'var(--text-1)', overflowWrap: 'anywhere' }}>{cat}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: '600', whiteSpace: 'nowrap' }}>{inUse} {inUse === 1 ? 'entry' : 'entries'}</span>
+                        <button onClick={() => { setEditingIncomeCategory(cat); setEditingIncomeCategoryValue(cat); }} title="Rename" style={{ background: 'rgba(37,99,235,0.08)', color: '#2563eb', border: '1px solid rgba(37,99,235,0.2)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: '15px', height: '15px' }}>{Icons.edit}</div></button>
+                        <button onClick={() => deleteIncomeCategory(cat)} title="Delete" style={{ background: 'rgba(220,38,38,0.08)', color: 'var(--danger)', border: '1px solid rgba(220,38,38,0.2)', padding: '7px', borderRadius: '8px', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: '15px', height: '15px' }}>{Icons.trash}</div></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Storage Monitor */}
           {(() => {
             const stats = storageStats || computeStorageStats();
@@ -12087,7 +12964,7 @@ setLivingExpenses(migrated.livingExpenses);
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 5.6.1
+              Version 6.0.0
             </p>
           </div>
         </div>
@@ -12112,12 +12989,12 @@ setLivingExpenses(migrated.livingExpenses);
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '5.6.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '5.6.1',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '5.6.1',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Daily Backup Payload',          value: '5.6.1',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
-                { label: 'Background Sync Payload',       value: '5.6.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '5.6.1',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '6.0.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '6.0.0',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '6.0.0',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Daily Backup Payload',          value: '6.0.0',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
+                { label: 'Background Sync Payload',       value: '6.0.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '6.0.0',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -12132,10 +13009,10 @@ setLivingExpenses(migrated.livingExpenses);
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v5.6.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v5.6.1',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v5.6.1',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v5.6.1',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v6.0.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v6.0.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v6.0.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v6.0.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -12257,6 +13134,7 @@ setLivingExpenses(migrated.livingExpenses);
           <NavButton icon={Icons.expenses} label="Farming Expenses" active={activeView === 'expenses'} onClick={() => handleNavClick('expenses')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Farming Expenses" />
           <NavButton icon={Icons.living}   label="Living Expenses" active={activeView === 'living'} onClick={() => handleNavClick('living')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Living Expenses" />
           <NavButton icon={Icons.contract} label="Project Works" active={activeView === 'contract'} onClick={() => handleNavClick('contract')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Project Works" />
+          <NavButton icon={Icons.trending} label="Income" active={activeView === 'income'} onClick={() => handleNavClick('income')} collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Income" />
           <NavButton icon={Icons.reports}  label="Reports"      active={activeView === 'reports'}  onClick={() => handleNavClick('reports')}  collapsed={!isMobile && !tabletSidebarExpanded} tooltip="Reports" />
         </div>
 

@@ -3,7 +3,7 @@
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  Version      : 5.6.1                                            ║
- * ║  Cache Key    : farm-manager-v5.6.1                              ║
+ * ║  Cache Key    : farm-manager-v6.0.0                              ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
  * ║  ─────────────────────────────────────────────────────────────   ║
@@ -49,7 +49,7 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in app-core.js.
-const CACHE_VERSION = 'v5.6.1';
+const CACHE_VERSION = 'v5.6.2';
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
 // Shell cache  — HTML + same-origin static assets.
