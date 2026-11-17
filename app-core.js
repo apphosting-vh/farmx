@@ -1505,7 +1505,7 @@ function FarmWageManager() {
   const hasMountedDataRef = React.useRef(false); // skip first-mount in edit-time tracking
 
   // ── App Update Notification ──────────────────────────────────────────────
-  const APP_VERSION = '6.0.0';
+  const APP_VERSION = '6.0.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [swReg, setSwReg] = useState(null);
@@ -2690,7 +2690,7 @@ function FarmWageManager() {
       incomes,
       incomeCategories,
       exportDate: new Date().toISOString(),
-      version: '6.0.0'
+      version: '6.0.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -3017,7 +3017,7 @@ setLivingExpenses(migrated.livingExpenses);
         incomes,
         incomeCategories,
         exportDate: new Date().toISOString(),
-        version: '6.0.0'
+        version: '6.0.1'
       };
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -3300,7 +3300,7 @@ setLivingExpenses(migrated.livingExpenses);
         creds:    { ...gcpCredsRef.current },
         fileId:   gcpFileIdRef.current,
         data:     { ...gcpSyncDataRef.current },
-        version:  '6.0.0',
+        version:  '6.0.1',
         queuedAt: new Date().toISOString(),
       });
       // Register with the Background Sync API if the browser supports it
@@ -3440,7 +3440,7 @@ setLivingExpenses(migrated.livingExpenses);
     const buildPayload = () => JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '6.0.0'
+      version: '6.0.1'
     }, null, 2);
 
     const doWithToken = async (token) => {
@@ -3969,7 +3969,7 @@ setLivingExpenses(migrated.livingExpenses);
     const payload = JSON.stringify({
       ...gcpSyncDataRef.current,
       exportDate: new Date().toISOString(),
-      version: '6.0.0',
+      version: '6.0.1',
       backupType: 'daily-auto',
     }, null, 2);
 
@@ -4022,7 +4022,7 @@ setLivingExpenses(migrated.livingExpenses);
       await bgIdbPut(db, 'dailyBackupPayload', {
         creds: { ...creds },
         data: { ...gcpSyncDataRef.current },
-        version: '6.0.0',
+        version: '6.0.1',
         queuedAt: new Date().toISOString(),
       });
       if (dailyBackupFolderIdRef.current) {
@@ -12964,7 +12964,7 @@ setLivingExpenses(migrated.livingExpenses);
               Farm Manager
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-1)', fontWeight: '500' }}>
-              Version 6.0.0
+              Version 6.0.1
             </p>
           </div>
         </div>
@@ -12989,12 +12989,12 @@ setLivingExpenses(migrated.livingExpenses);
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', marginBottom:'6px', marginTop:'2px' }}>index.html</div>
               {[
                 { label: 'APP_VERSION Constant',          value: APP_VERSION,  desc: 'Runtime constant — drives update detection & SW comparison' },
-                { label: 'Local Backup Payload',          value: '6.0.0',      desc: 'Version tag embedded in downloaded JSON backup files' },
-                { label: 'Google Drive Picker Backup',    value: '6.0.0',      desc: 'Version tag written when saving backup via Drive Picker' },
-                { label: 'Google Cloud Sync Push',        value: '6.0.0',      desc: 'Version tag written on every auto-sync push to Drive' },
-                { label: 'Daily Backup Payload',          value: '6.0.0',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
-                { label: 'Background Sync Payload',       value: '6.0.0',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
-                { label: 'UI Display — Settings Panel',   value: '6.0.0',      desc: 'Version string shown in the Settings panel header' },
+                { label: 'Local Backup Payload',          value: '6.0.1',      desc: 'Version tag embedded in downloaded JSON backup files' },
+                { label: 'Google Drive Picker Backup',    value: '6.0.1',      desc: 'Version tag written when saving backup via Drive Picker' },
+                { label: 'Google Cloud Sync Push',        value: '6.0.1',      desc: 'Version tag written on every auto-sync push to Drive' },
+                { label: 'Daily Backup Payload',          value: '6.0.1',      desc: 'Version tag embedded in automatic daily Google Drive backups' },
+                { label: 'Background Sync Payload',       value: '6.0.1',      desc: 'Version tag stored in IndexedDB for offline sync queue' },
+                { label: 'UI Display — Settings Panel',   value: '6.0.1',      desc: 'Version string shown in the Settings panel header' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>
@@ -13009,10 +13009,10 @@ setLivingExpenses(migrated.livingExpenses);
               {/* sw.js references */}
               <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.07em', textTransform:'uppercase', color:'var(--text-3)', margin:'14px 0 6px' }}>sw.js</div>
               {[
-                { label: 'CACHE_VERSION',   value: 'v6.0.0',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
-                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v6.0.0',        desc: 'Cache bucket for HTML & same-origin static assets' },
-                { label: 'ASSET_CACHE',     value: 'farm-manager-assets-v6.0.0',       desc: 'Cache bucket for CDN libraries (React, Babel, etc.)' },
-                { label: 'FONT_CACHE',      value: 'farm-manager-fonts-v6.0.0',        desc: 'Cache bucket for Google Fonts CSS & woff2 binaries' },
+                { label: 'CACHE_VERSION',   value: 'v6.0.1',                          desc: 'Master SW version key — must match APP_VERSION on every release' },
+                { label: 'SHELL_CACHE',     value: 'farm-manager-shell-v6.0.1',        desc: 'Versioned bucket: HTML, app-core.js, manifest & icons' },
+                { label: 'ASSET_CACHE',     value: 'farm-manager-assets',              desc: 'Shared bucket: React, Babel & other pinned CDN libraries' },
+                { label: 'FONT_CACHE',      value: 'farm-manager-fonts',               desc: 'Shared bucket: Google Fonts CSS + every woff2 binary' },
               ].map(({ label, value, desc }) => (
                 <div key={label} style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)', gap:'12px' }}>
                   <div style={{ minWidth:0 }}>

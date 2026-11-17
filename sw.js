@@ -2,46 +2,55 @@
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║           FARM MANAGER — SERVICE WORKER                          ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Version      : 5.6.1                                            ║
- * ║  Cache Key    : farm-manager-v6.0.0                              ║
+ * ║  Version      : 6.0.1                                            ║
+ * ║  Cache Key    : farm-manager-shell-v6.0.1                        ║
+ * ╠══════════════════════════════════════════════════════════════════╣
+ * ║  OFFLINE-FIRST GUARANTEE                                          ║
+ * ║  ──────────────────────────────────────────────────────────────   ║
+ * ║  Install precaches EVERYTHING the app needs to boot with no       ║
+ * ║  network at all:                                                  ║
+ * ║    • App shell        — index.html, app-core.js                   ║
+ * ║    • PWA metadata     — manifest.json, icon-192, icon-512         ║
+ * ║    • Libraries        — React 18, ReactDOM 18, Babel Standalone   ║
+ * ║    • Fonts            — Google Fonts CSS *and every woff2 binary* ║
+ * ║                         parsed out of that CSS (no lazy gaps)     ║
+ * ║                                                                   ║
+ * ║  Shell + libraries are treated as CRITICAL: if any of them cannot ║
+ * ║  be fetched, the install FAILS and the browser retries later. An  ║
+ * ║  incomplete worker is never activated, so "installed" always      ║
+ * ║  means "works offline".                                           ║
+ * ║                                                                   ║
+ * ║  All URLs are derived from the worker's own scope, so the exact   ║
+ * ║  same file works at https://apphosting-vh.github.io/farmx/ and at ║
+ * ║  http://localhost:PORT/ during local testing.                     ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  UPDATE DELIVERY MECHANISM                                        ║
- * ║  ─────────────────────────────────────────────────────────────   ║
- * ║  1. On each new GitHub Pages deploy, update CACHE_VERSION below. ║
- * ║     The browser detects the changed SW byte-for-byte and begins  ║
- * ║     installing the new SW alongside the running one.             ║
- * ║  2. install  → precaches all app shell assets under new key.     ║
- * ║  3. New SW enters "waiting" state — does NOT disrupt the user.   ║
- * ║  4. The app's React update banner fires (via updatefound event). ║
- * ║  5. User clicks "Update Now" → app sends { type: SKIP_WAITING }. ║
- * ║  6. skipWaiting() → activate fires → clients.claim() takes       ║
- * ║     control → controllerchange fires on every tab → auto-reload. ║
- * ║  7. activate deletes ALL old cache keys, installs fresh cache.   ║
+ * ║  1. On each deploy, update CACHE_VERSION below. The browser       ║
+ * ║     detects the changed SW byte-for-byte and installs the new     ║
+ * ║     worker alongside the running one.                            ║
+ * ║  2. install  → precaches all assets under the new shell key.      ║
+ * ║  3. New SW enters "waiting" — it does NOT disrupt the user.       ║
+ * ║  4. The app's update banner fires (via updatefound event).        ║
+ * ║  5. "Update Now" → app sends { type: SKIP_WAITING }.              ║
+ * ║  6. activate → clients.claim() → controllerchange → reload.       ║
+ * ║  7. activate deletes all old cache buckets.                       ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  CACHING STRATEGIES                                               ║
- * ║    index.html   → Navigation-preload + network-first (3s timeout)║
- * ║    CDN scripts  → Cache-first     (pinned semver URLs, immutable)║
- * ║    Icons/assets → Cache-first     (static, versioned by SW key)  ║
- * ║    Google Fonts → Stale-while-revalidate (dedicated FONT_CACHE)  ║
- * ║    Google APIs  → Network-only    (authenticated, never cache)   ║
- * ║    Everything else → Stale-while-revalidate                      ║
- * ╠══════════════════════════════════════════════════════════════════╣
- * ║  OPTIMISATIONS IN THIS VERSION                                    ║
- * ║    • Parallel precaching — Promise.all replaces serial for-loops ║
- * ║    • Google Fonts CSS precached at install time (FONT_URLS)      ║
- * ║    • Dedicated FONT_CACHE bucket (separate from ASSET_CACHE)     ║
- * ║    • Smart network-first with 3 s timeout for app shell          ║
- * ║    • PREFETCH_FONTS message → idle-time warm-cache of woff2 URLs ║
- * ║    • trimCache() — per-bucket entry limits, runs at install +    ║
- * ║      activate + after every cache write (async, non-blocking)    ║
- * ║    • SW_READY_FOR_WARM_CACHE notification sent after install so  ║
- * ║      the page can schedule idle prefetch via requestIdleCallback  ║
+ * ║    Navigations   → Navigation-preload + network-first (3s) then   ║
+ * ║                    cached shell → inline offline page             ║
+ * ║    app-core.js   → Network-first with timeout, cache fallback     ║
+ * ║    CDN libraries → Cache-first     (pinned semver, immutable)     ║
+ * ║    Icons/manifest→ Cache-first                                    ║
+ * ║    Google Fonts  → Stale-while-revalidate (dedicated FONT_CACHE)  ║
+ * ║    Google APIs   → Network-only    (authenticated, never cached)  ║
+ * ║    Everything else → Stale-while-revalidate                       ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║  ⚠️  HOW TO RELEASE A NEW VERSION                                ║
- * ║     1. Change CACHE_VERSION string below (e.g. v2.6.0)           ║
- * ║     2. Change APP_VERSION in app-core.js to match                ║
- * ║     3. Push both files to GitHub — Pages redeploys automatically ║
- * ║     Browser detects SW byte-change → update flow begins          ║
+ * ║     1. Change CACHE_VERSION string below (e.g. v6.0.2)            ║
+ * ║     2. Change APP_VERSION in app-core.js to match                 ║
+ * ║     3. Update the "Version" comment at the top of index.html      ║
+ * ║     4. Push — Pages redeploys automatically. The browser sees the ║
+ * ║        byte-change and starts the update flow.                    ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
@@ -49,22 +58,36 @@
 
 // ─── VERSION — BUMP THIS ON EVERY RELEASE ────────────────────────────────────
 // Must match APP_VERSION constant in app-core.js.
-const CACHE_VERSION = 'v5.6.2';
+const CACHE_VERSION = 'v6.0.1';
+
+// ─── App location — derived from this worker's scope ─────────────────────────
+// On GitHub Pages  : origin=https://apphosting-vh.github.io  path=/farmx
+// On localhost     : origin=http://localhost:8084            path=''
+// Deriving these means the app is offline-capable wherever it is served,
+// instead of only at one hard-coded GitHub Pages URL.
+const SCOPE_URL  = new URL(self.registration.scope);
+const APP_ORIGIN = SCOPE_URL.origin;
+const APP_PATH   = SCOPE_URL.pathname.replace(/\/+$/, ''); // '' or '/farmx'
+const APP_BASE   = `${APP_ORIGIN}${APP_PATH}/`;
 
 // ─── Cache bucket names ───────────────────────────────────────────────────────
-// Shell cache  — HTML + same-origin static assets.
-// Asset cache  — CDN libraries (React, Babel, etc.) shared across versions.
-// Font cache   — Google Fonts CSS + woff2 binaries, shared across versions.
+// Shell cache  — HTML, app-core.js, manifest & icons. Versioned, so a new
+//                release starts from a clean slate and never serves stale HTML.
+// Asset cache  — CDN libraries (React, Babel, …). Pinned URLs are immutable,
+//                so this bucket is intentionally NOT versioned: upgrading the
+//                app never re-downloads 3 MB of libraries. Activate purges any
+//                legacy versioned buckets.
+// Font cache   — Google Fonts CSS + woff2 binaries. Immutable, not versioned.
 const SHELL_CACHE = `farm-manager-shell-${CACHE_VERSION}`;
-const ASSET_CACHE = `farm-manager-assets-${CACHE_VERSION}`;
-const FONT_CACHE  = `farm-manager-fonts-${CACHE_VERSION}`;
+const ASSET_CACHE = 'farm-manager-assets';
+const FONT_CACHE  = 'farm-manager-fonts';
 
 // ─── Cache size limits (max entries per bucket) ───────────────────────────────
 // Oldest entries are evicted when a bucket exceeds its limit, preventing the
 // browser from hitting its storage quota and silently dropping whole caches.
-const SHELL_CACHE_MAX_ENTRIES = 20;
+const SHELL_CACHE_MAX_ENTRIES = 30;
 const ASSET_CACHE_MAX_ENTRIES = 60;
-const FONT_CACHE_MAX_ENTRIES  = 40;
+const FONT_CACHE_MAX_ENTRIES  = 60;
 
 // ─── Network timeout for app-shell fetches (ms) ──────────────────────────────
 // If the network has not responded within this window we serve the cached
@@ -72,33 +95,43 @@ const FONT_CACHE_MAX_ENTRIES  = 40;
 const SHELL_NETWORK_TIMEOUT_MS = 3000;
 
 // ─── Resources to pre-cache during install ────────────────────────────────────
-const SHELL_URLS = [
-  'https://apphosting-vh.github.io/farmx/',
-  'https://apphosting-vh.github.io/farmx/index.html',
-  'https://apphosting-vh.github.io/farmx/app-core.js',
-  'https://apphosting-vh.github.io/farmx/manifest.json',
+
+// CRITICAL shell files — install FAILS if any of these cannot be fetched.
+// This is what makes "installed" equal "works with no network".
+const CRITICAL_SHELL_URLS = [
+  APP_BASE,
+  `${APP_BASE}index.html`,
+  `${APP_BASE}app-core.js`,
+];
+
+// Optional shell files — nice for a complete PWA install, but the app still
+// boots offline without them, so a missing file must not block installation.
+const OPTIONAL_SHELL_URLS = [
+  `${APP_BASE}manifest.json`,
+  `${APP_BASE}icon-192.png`,
+  `${APP_BASE}icon-512.png`,
+  `${APP_BASE}offline.html`,
 ];
 
 // CDN scripts: pinned semver URLs — content never changes for a given URL.
-// Served from ASSET_CACHE indefinitely; evicted only when ASSET_CACHE key changes.
+// CRITICAL: without Babel/React the app cannot render at all, so a failed
+// fetch aborts the install instead of activating a half-usable worker.
 const CDN_URLS = [
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone@7.26.0/babel.min.js',
 ];
 
-// Google Fonts CSS stylesheet(s) — precached at install so font metrics are
-// available for the very first paint, even on a slow connection.
-// The woff2 binary files themselves are warm-cached on idle after app load
-// via the PREFETCH_FONTS message (sent from index.html's requestIdleCallback).
-const FONT_URLS = [
-  'https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap',
-];
+// Google Fonts stylesheet. Its woff2 binaries are discovered by parsing this
+// CSS at install time and are precached too, so typography is identical
+// offline on the very first offline boot (not just after a warm-up visit).
+const FONT_CSS_URL =
+  'https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap';
+
+// Matches url(https://fonts.gstatic.com/…woff2) inside a Google Fonts stylesheet.
+const FONT_BINARY_RE = /url\(\s*(['"]?)(https:\/\/fonts\.gstatic\.com\/[^'")]+)\1\s*\)/g;
 
 // ─── URL classifiers ──────────────────────────────────────────────────────────
-const APP_ORIGIN = 'apphosting-vh.github.io';
-const APP_PATH   = '/farmx';
-
 const CDN_ORIGINS = [
   'unpkg.com',
   'cdnjs.cloudflare.com',
@@ -115,29 +148,19 @@ const GOOGLE_ORIGINS = [
   'googleapis.com',
   'accounts.google.com',
   'drive.google.com',
+  'apis.google.com',
 ];
 
-function isAppShell(url) {
+function isAppShellPath(pathname) {
   return (
-    url.hostname === APP_ORIGIN &&
-    (url.pathname === `${APP_PATH}/` ||
-     url.pathname === `${APP_PATH}/index.html` ||
-     url.pathname.endsWith('/'))
+    pathname === APP_PATH ||
+    pathname === `${APP_PATH}/` ||
+    pathname === `${APP_PATH}/index.html`
   );
 }
 
-function isAppCore(url) {
-  return (
-    url.hostname === APP_ORIGIN &&
-    url.pathname === `${APP_PATH}/app-core.js`
-  );
-}
-
-function isSameOriginStatic(url) {
-  return (
-    url.hostname === APP_ORIGIN &&
-    /\.(png|jpg|jpeg|svg|ico|json|webp|woff2?|txt|xml)$/i.test(url.pathname)
-  );
+function isAppCorePath(pathname) {
+  return pathname === `${APP_PATH}/app-core.js`;
 }
 
 function isCDNAsset(url) {
@@ -159,15 +182,21 @@ function isGoogleAPI(url) {
 //  QUOTA MANAGEMENT — trim a cache bucket to at most maxEntries entries
 //
 //  Cache API preserves insertion order, so keys()[0] is always the oldest.
-//  We slice off the front of the list when the bucket is over budget.
+//  Entries listed in `protectedUrls` are never evicted (e.g. the fonts
+//  stylesheet, which is written before the binaries it points at).
 //  Called: after install precaching, in activate, and after each cache write.
 // ─────────────────────────────────────────────────────────────────────────────
-async function trimCache(cacheName, maxEntries) {
+async function trimCache(cacheName, maxEntries, protectedUrls = []) {
   try {
-    const cache  = await caches.open(cacheName);
-    const keys   = await cache.keys();
+    const cache = await caches.open(cacheName);
+    const keys  = await cache.keys();
     if (keys.length <= maxEntries) return;
-    const excess = keys.slice(0, keys.length - maxEntries);
+
+    const protectedSet = new Set(protectedUrls);
+    const removable = keys.filter(req => !protectedSet.has(req.url));
+
+    const excess = removable.slice(0, Math.max(0, keys.length - maxEntries));
+    if (!excess.length) return;
     await Promise.all(excess.map(key => cache.delete(key)));
     console.log(`[SW] Trimmed ${excess.length} excess entries from ${cacheName}`);
   } catch (e) {
@@ -175,78 +204,123 @@ async function trimCache(cacheName, maxEntries) {
   }
 }
 
+function trimAllCaches() {
+  return Promise.all([
+    trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
+    trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
+    trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES, [FONT_CSS_URL]),
+  ]);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  INSTALL — Precache app shell, CDN assets, and font stylesheets in PARALLEL
-//
-//  All three cache buckets are opened and filled concurrently (outer Promise.all).
-//  Within each bucket, every URL is also fetched in parallel (inner Promise.all),
-//  cutting install time from O(N sequential round-trips) to ~O(1 round-trip).
-//
-//  After precaching, SW_READY_FOR_WARM_CACHE is broadcast so any open window
-//  can schedule idle-time warm-caching of font binaries (woff2 URLs).
+//  PRECACHE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch a URL with the HTTP cache bypassed, validate it, and store it.
+ * Throws on network error or non-2xx so the caller can fail the install.
+ */
+async function putStrict(cache, url) {
+  const response = await fetch(new Request(url, { cache: 'reload' }));
+  if (!response || !response.ok) {
+    throw new Error(`HTTP ${response ? response.status : 'network error'} for ${url}`);
+  }
+  await cache.put(url, response);
+}
+
+/**
+ * Best-effort precache: log and continue when an individual URL fails.
+ */
+async function putOptional(cache, urls) {
+  await Promise.all(urls.map(async url => {
+    try {
+      await putStrict(cache, url);
+    } catch (e) {
+      console.warn(`[SW] Optional precache skipped: ${url} — ${e.message}`);
+    }
+  }));
+}
+
+/**
+ * CDN libraries. Pinned URLs never change, so anything already in the
+ * (unversioned) asset bucket is reused — no re-download on every release.
+ * Failures propagate: these libraries are required for the app to render.
+ */
+async function precacheCDN(cache) {
+  await Promise.all(CDN_URLS.map(async url => {
+    if (await cache.match(url)) return;
+    await putStrict(cache, url);
+  }));
+}
+
+/**
+ * Google Fonts: cache the stylesheet, parse out every woff2 URL it references,
+ * and cache those binaries too. This closes the "fonts only cached after they
+ * happen to be used" gap that left the first offline boot with fallback fonts.
+ * Font failures are non-fatal — the app still runs with system fonts.
+ */
+async function precacheFonts() {
+  const cache = await caches.open(FONT_CACHE);
+  try {
+    const cssResponse = await fetch(FONT_CSS_URL, { mode: 'cors', cache: 'reload' });
+    if (!cssResponse || !cssResponse.ok) {
+      throw new Error(`HTTP ${cssResponse ? cssResponse.status : 'network error'}`);
+    }
+
+    const cssText = await cssResponse.clone().text();
+    await cache.put(FONT_CSS_URL, cssResponse);
+
+    const fontUrls = new Set();
+    let match;
+    FONT_BINARY_RE.lastIndex = 0;
+    while ((match = FONT_BINARY_RE.exec(cssText)) !== null) {
+      fontUrls.add(match[2]);
+    }
+
+    await Promise.all([...fontUrls].map(async url => {
+      try {
+        if (await cache.match(url, { ignoreVary: true })) return;
+        const res = await fetch(url, { mode: 'cors', cache: 'reload' });
+        if (res.ok) await cache.put(url, res);
+      } catch (e) {
+        console.warn(`[SW] Font binary precache skipped: ${url} — ${e.message}`);
+      }
+    }));
+
+    console.log(`[SW] Fonts precached: stylesheet + ${fontUrls.size} binaries`);
+  } catch (e) {
+    console.warn(`[SW] Font precache failed: ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INSTALL — Precache the complete offline bundle
 // ─────────────────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   console.log(`[SW] Installing Farm Manager ${CACHE_VERSION}`);
 
   event.waitUntil((async () => {
-
-    // ── Parallel bucket fill ──────────────────────────────────────────────────
+    // ── 1. Critical assets — a failure here rejects install() on purpose ─────
     await Promise.all([
-
-      // 1. App shell (HTML + manifest) — always re-fetch to pick up new deploys
       caches.open(SHELL_CACHE).then(cache =>
-        Promise.all(SHELL_URLS.map(async url => {
-          try {
-            const res = await fetch(url, { cache: 'reload' }); // bypass HTTP cache
-            if (res.ok) await cache.put(url, res);
-          } catch (e) {
-            console.warn(`[SW] Shell precache skipped: ${url}`, e.message);
-          }
-        }))
+        Promise.all(CRITICAL_SHELL_URLS.map(url => putStrict(cache, url)))
       ),
-
-      // 2. CDN scripts — skip URLs already cached to save bandwidth on minor bumps
-      caches.open(ASSET_CACHE).then(cache =>
-        Promise.all(CDN_URLS.map(async url => {
-          try {
-            const existing = await cache.match(url);
-            if (!existing) {
-              const res = await fetch(url);
-              if (res.ok) await cache.put(url, res);
-            }
-          } catch (e) {
-            console.warn(`[SW] CDN precache skipped: ${url}`, e.message);
-          }
-        }))
-      ),
-
-      // 3. Google Fonts CSS — CORS mode required; skip if already cached
-      caches.open(FONT_CACHE).then(cache =>
-        Promise.all(FONT_URLS.map(async url => {
-          try {
-            const existing = await cache.match(url);
-            if (!existing) {
-              const res = await fetch(url, { mode: 'cors' });
-              if (res.ok) await cache.put(url, res);
-            }
-          } catch (e) {
-            console.warn(`[SW] Font precache skipped: ${url}`, e.message);
-          }
-        }))
-      ),
-
+      caches.open(ASSET_CACHE).then(cache => precacheCDN(cache)),
     ]);
 
-    // ── Post-install quota guard ──────────────────────────────────────────────
+    // ── 2. Non-critical assets — never block a working install ──────────────
     await Promise.all([
-      trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
-      trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
-      trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
+      caches.open(SHELL_CACHE).then(cache => putOptional(cache, OPTIONAL_SHELL_URLS)),
+      precacheFonts(),
     ]);
 
-    console.log(`[SW] Precache complete for ${CACHE_VERSION}`);
+    // ── 3. Post-install quota guard ──────────────────────────────────────────
+    await trimAllCaches();
 
-    // ── Notify open windows so they can idle-prefetch font binaries ───────────
+    console.log(`[SW] Offline precache complete for ${CACHE_VERSION}`);
+
+    // ── 4. Notify open windows so they can idle-prefetch any font binaries ───
+    // (Belt and braces: the install already cached every woff2 it found.)
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     clients.forEach(client =>
       client.postMessage({ type: 'SW_READY_FOR_WARM_CACHE', version: CACHE_VERSION })
@@ -264,17 +338,14 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   console.log(`[SW] Activating Farm Manager ${CACHE_VERSION}`);
 
+  const KEEP = new Set([SHELL_CACHE, ASSET_CACHE, FONT_CACHE]);
+
   event.waitUntil(
-    // 1. Purge every cache that belongs to this app but is NOT the current version
+    // 1. Purge every cache that belongs to this app but is not current
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(key =>
-            key.startsWith('farm-manager-') &&
-            key !== SHELL_CACHE &&
-            key !== ASSET_CACHE &&
-            key !== FONT_CACHE
-          )
+          .filter(key => key.startsWith('farm-manager-') && !KEEP.has(key))
           .map(stale => {
             console.log(`[SW] Deleting stale cache: ${stale}`);
             return caches.delete(stale);
@@ -282,11 +353,7 @@ self.addEventListener('activate', event => {
       ))
 
       // 2. Enforce per-bucket entry limits on the current version's caches
-      .then(() => Promise.all([
-        trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
-        trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
-        trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
-      ]))
+      .then(() => trimAllCaches())
 
       // 3. Take control of ALL open tabs immediately — without waiting for reload
       .then(() => self.clients.claim())
@@ -295,7 +362,7 @@ self.addEventListener('activate', event => {
       //    the HTML in parallel with SW boot, eliminating startup-latency penalty.
       .then(() => {
         if (self.registration.navigationPreload) {
-          return self.registration.navigationPreload.enable();
+          return self.registration.navigationPreload.enable().catch(() => {});
         }
       })
 
@@ -339,9 +406,9 @@ self.addEventListener('message', event => {
 
     // ── PREFETCH_FONTS ────────────────────────────────────────────────────────
     // Sent from a requestIdleCallback in index.html after the app shell is
-    // interactive. Warm-caches any woff2 font URLs that weren't in the initial
-    // FONT_URLS precache list so future visits serve fonts from cache instantly.
-    // event.data.urls  — string[] of woff2 (or other font) URLs to prefetch
+    // interactive. Install already caches the stylesheet and every woff2 it
+    // references; this catches any stylesheet URL the page adds later.
+    // event.data.urls  — string[] of font stylesheet / binary URLs to prefetch
     case 'PREFETCH_FONTS': {
       const urls = Array.isArray(event.data.urls) ? event.data.urls : [];
       if (!urls.length) break;
@@ -350,10 +417,28 @@ self.addEventListener('message', event => {
         const cache = await caches.open(FONT_CACHE);
         await Promise.all(urls.map(async url => {
           try {
-            if (await cache.match(url)) return; // already cached — skip
+            if (await cache.match(url, { ignoreVary: true })) return; // already cached
             const res = await fetch(url, { mode: 'cors' });
+
             if (res.ok) {
               await cache.put(url, res);
+
+              // If this was a stylesheet, also pull in the binaries it references.
+              if (/\.css(\?|$)/i.test(url) || url.includes('fonts.googleapis.com')) {
+                const cssText = await res.clone().text();
+                const binaries = new Set();
+                let m;
+                FONT_BINARY_RE.lastIndex = 0;
+                while ((m = FONT_BINARY_RE.exec(cssText)) !== null) binaries.add(m[2]);
+                await Promise.all([...binaries].map(async fontUrl => {
+                  try {
+                    if (await cache.match(fontUrl, { ignoreVary: true })) return;
+                    const fontRes = await fetch(fontUrl, { mode: 'cors' });
+                    if (fontRes.ok) await cache.put(fontUrl, fontRes);
+                  } catch (_) {}
+                }));
+              }
+
               console.log(`[SW] Warm-cached font: ${url}`);
             }
           } catch (e) {
@@ -361,7 +446,7 @@ self.addEventListener('message', event => {
           }
         }));
         // Trim after warm-caching in case woff2 blobs pushed us over the limit
-        await trimCache(FONT_CACHE, FONT_CACHE_MAX_ENTRIES);
+        await trimCache(FONT_CACHE, FONT_CACHE_MAX_ENTRIES, [FONT_CSS_URL]);
       })());
       break;
     }
@@ -369,11 +454,7 @@ self.addEventListener('message', event => {
     // ── TRIM_CACHES ───────────────────────────────────────────────────────────
     // Lets the page request a quota sweep on demand (e.g. from a settings UI).
     case 'TRIM_CACHES':
-      event.waitUntil(Promise.all([
-        trimCache(SHELL_CACHE, SHELL_CACHE_MAX_ENTRIES),
-        trimCache(ASSET_CACHE, ASSET_CACHE_MAX_ENTRIES),
-        trimCache(FONT_CACHE,  FONT_CACHE_MAX_ENTRIES),
-      ]));
+      event.waitUntil(trimAllCaches());
       break;
 
     default:
@@ -810,6 +891,20 @@ self.addEventListener('fetch', event => {
 
   if (!url.protocol.startsWith('http')) return;
 
+  // ── Navigations & app shell → preload-first, network-first, cache fallback ─
+  // Any in-scope navigation is treated as the app shell, so deep links and
+  // URLs with query strings still boot the cached SPA when offline.
+  if (url.origin === APP_ORIGIN && (request.mode === 'navigate' || isAppShellPath(url.pathname))) {
+    event.respondWith(appShellResponse(event, SHELL_CACHE));
+    return;
+  }
+
+  // ── app-core.js → network-first with timeout, always cache fallback ───────
+  if (url.origin === APP_ORIGIN && isAppCorePath(url.pathname)) {
+    event.respondWith(networkFirstWithTimeout(request, SHELL_CACHE, SHELL_NETWORK_TIMEOUT_MS));
+    return;
+  }
+
   // ── Google Fonts → Stale-while-revalidate (dedicated FONT_CACHE) ─────────
   // ⚠️  MUST be checked BEFORE isGoogleAPI.
   // fonts.googleapis.com hostname ends with "googleapis.com", so if isGoogleAPI
@@ -822,35 +917,22 @@ self.addEventListener('fetch', event => {
 
   // ── Google APIs → Network-only (never cache authenticated requests) ───────
   // Covers oauth2.googleapis.com (token refresh), www.googleapis.com (Drive
-  // API), accounts.google.com, and drive.google.com.  All auth-bearing
-  // requests must hit the network every time — no caching, no interception.
+  // API), accounts.google.com, apis.google.com and drive.google.com. All
+  // auth-bearing requests must hit the network every time. Drive/GIS features
+  // inherently require connectivity; the rest of the app does not.
   if (isGoogleAPI(url)) return;
-
-  // ── App shell → Navigation-preload-first + 3 s timeout ───────────────────
-  // Navigation Preload lets the browser fetch HTML in parallel with SW boot.
-  // If the network is slow (> SHELL_NETWORK_TIMEOUT_MS), we immediately fall
-  // back to the cached shell so the app feels responsive on any connection.
-  if (isAppShell(url)) {
-    event.respondWith(navigationPreloadFirst(event, SHELL_CACHE));
-    return;
-  }
-
-  if (isAppCore(url)) {
-    event.respondWith(networkFirstWithTimeout(request, SHELL_CACHE, SHELL_NETWORK_TIMEOUT_MS));
-    return;
-  }
-
-  // ── Same-origin static assets (icons, manifest) → Cache-first ────────────
-  if (isSameOriginStatic(url)) {
-    event.respondWith(cacheFirst(request, SHELL_CACHE));
-    return;
-  }
 
   // ── CDN libraries → Cache-first ──────────────────────────────────────────
   // Pinned semver URLs are immutable — serve from cache instantly, fetch
   // from network only if not yet cached.
   if (isCDNAsset(url)) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
+    return;
+  }
+
+  // ── Same-origin static assets (icons, manifest, offline.html) ────────────
+  if (url.origin === APP_ORIGIN) {
+    event.respondWith(cacheFirst(request, SHELL_CACHE));
     return;
   }
 
@@ -862,56 +944,91 @@ self.addEventListener('fetch', event => {
 //  CACHING STRATEGY IMPLEMENTATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Navigation-Preload-First (app-shell strategy)
- *
- * Uses the preloaded response the browser started fetching in parallel with
- * SW startup — eliminating SW boot latency on repeat navigations.
- * Falls back to networkFirstWithTimeout → cached shell → offline page.
- */
-async function navigationPreloadFirst(event, cacheName) {
-  const cache = await caches.open(cacheName);
-
-  try {
-    const preloadResponse = await event.preloadResponse;
-    if (preloadResponse && preloadResponse.status === 200) {
-      cache.put(event.request, preloadResponse.clone()); // update cache in background
-      return preloadResponse;
-    }
-  } catch {
-    // Navigation Preload unavailable or failed — fall through to timed network fetch
-  }
-
-  return networkFirstWithTimeout(event.request, cacheName, SHELL_NETWORK_TIMEOUT_MS);
+function withTimeout(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`[SW] Network timeout after ${timeoutMs} ms`)), timeoutMs)
+    ),
+  ]);
 }
 
 /**
- * Network-First with Timeout (used for the app shell)
+ * App-shell (navigation) strategy.
  *
- * Races the network fetch against a countdown timer. If the network wins and
- * delivers a valid response it is cached and returned. If the timer fires first
- * we serve the cached shell immediately — no blank screen, no indefinite spinner.
+ * 1. Use the Navigation Preload response if the browser already fetched one.
+ * 2. Otherwise race the network against SHELL_NETWORK_TIMEOUT_MS.
+ * 3. If the network fails, is too slow, or we are offline, serve the cached
+ *    shell (matching any in-scope URL to the cached index.html) and finally
+ *    the built-in offline page.
+ *
+ * The successful HTML is stored under the canonical APP_BASE key so query
+ * strings (?_v=…) and deep links never bloat the cache or evict the shell.
  */
-async function networkFirstWithTimeout(request, cacheName, timeoutMs) {
+async function appShellResponse(event, cacheName) {
   const cache = await caches.open(cacheName);
 
-  const timeout = new Promise((_, reject) =>
-    setTimeout(
-      () => reject(new Error(`[SW] Network timeout after ${timeoutMs} ms`)),
-      timeoutMs
-    )
-  );
+  const fromCache = async () => {
+    const exact = await cache.match(event.request, { ignoreSearch: true });
+    if (exact) return exact;
+    const root = (await cache.match(APP_BASE)) ||
+                 (await cache.match(`${APP_BASE}index.html`));
+    if (root) return root;
+    return offlinePage();
+  };
 
   try {
-    const networkResponse = await Promise.race([fetch(request), timeout]);
+    const preloadResponse = await event.preloadResponse;
+    if (preloadResponse && preloadResponse.ok) {
+      await cache.put(APP_BASE, preloadResponse.clone()).catch(() => {});
+      return preloadResponse;
+    }
+  } catch {
+    // Navigation Preload unavailable or failed — fall through to timed fetch
+  }
+
+  // Known-offline: skip the pointless (and slow) network attempt entirely.
+  if (self.navigator && self.navigator.onLine === false) {
+    return fromCache();
+  }
+
+  try {
+    const networkResponse = await withTimeout(fetch(event.request), SHELL_NETWORK_TIMEOUT_MS);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
-      cache.put(request, networkResponse.clone());
+      await cache.put(APP_BASE, networkResponse.clone()).catch(() => {});
     }
     return networkResponse;
   } catch (err) {
-    // Timeout or offline — serve the cached shell instantly
-    console.log(`[SW] ${err.message} — serving cached shell: ${request.url}`);
-    const cached = await cache.match(request);
+    console.log(`[SW] ${err.message} — serving cached shell for ${event.request.url}`);
+    return fromCache();
+  }
+}
+
+/**
+ * Network-First with Timeout (used for app-core.js)
+ *
+ * Races the network fetch against a countdown timer. If the network wins and
+ * delivers a valid response it is cached and returned. If the timer fires first
+ * (or we are offline) we serve the cached copy immediately — no blank screen,
+ * no indefinite spinner, and the React app can still boot.
+ */
+async function networkFirstWithTimeout(request, cacheName, timeoutMs) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request, { ignoreSearch: true });
+
+  if (self.navigator && self.navigator.onLine === false && cached) {
+    return cached;
+  }
+
+  try {
+    const networkResponse = await withTimeout(fetch(request), timeoutMs);
+    if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
+      await cache.put(request, networkResponse.clone()).catch(() => {});
+    }
+    return networkResponse;
+  } catch (err) {
+    // Timeout or offline — serve the cached copy instantly
+    console.log(`[SW] ${err.message} — serving cached asset: ${request.url}`);
     if (cached) return cached;
     return offlinePage();
   }
@@ -934,10 +1051,7 @@ async function cacheFirst(request, cacheName) {
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
       await cache.put(request, networkResponse.clone());
       // Non-blocking trim — keeps quota healthy without slowing the response
-      const limit = cacheName === FONT_CACHE  ? FONT_CACHE_MAX_ENTRIES
-                  : cacheName === SHELL_CACHE ? SHELL_CACHE_MAX_ENTRIES
-                  : ASSET_CACHE_MAX_ENTRIES;
-      trimCache(cacheName, limit).catch(() => {});
+      trimAllCaches().catch(() => {});
     }
     return networkResponse;
   } catch {
@@ -955,16 +1069,16 @@ async function cacheFirst(request, cacheName) {
  */
 async function staleWhileRevalidate(request, cacheName) {
   const cache  = await caches.open(cacheName);
-  const cached = await cache.match(request);
+  // Google Fonts responses carry `Vary: User-Agent`; ignoring it makes cached
+  // stylesheets/fonts match regardless of the UA used to populate the cache.
+  const matchOptions = cacheName === FONT_CACHE ? { ignoreVary: true } : undefined;
+  const cached = await cache.match(request, matchOptions);
 
   const networkFetch = fetch(request)
     .then(async response => {
       if (response && response.status === 200 && response.type !== 'error') {
         await cache.put(request, response.clone());
-        const limit = cacheName === FONT_CACHE  ? FONT_CACHE_MAX_ENTRIES
-                    : cacheName === SHELL_CACHE ? SHELL_CACHE_MAX_ENTRIES
-                    : ASSET_CACHE_MAX_ENTRIES;
-        trimCache(cacheName, limit).catch(() => {});
+        trimAllCaches().catch(() => {});
       }
       return response;
     })
@@ -1028,9 +1142,9 @@ function offlinePage() {
     <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></svg>No Internet Connection</div>
     <h1>You're Offline</h1>
     <p>
-      Farm Manager needs a connection to load for the first time.
-      Once loaded online, it works fully offline — your data is always
-      stored locally on this device.
+      This page could not be loaded from the offline cache. Open Farm
+      Manager once with a connection so it can download and store
+      everything it needs — after that it starts with no network at all.
     </p>
     <button onclick="window.location.reload()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>Try Again</button>
     <p class="hint">Your farm data is safe and waiting for you.</p>
