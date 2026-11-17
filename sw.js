@@ -992,7 +992,7 @@ async function appShellResponse(event, cacheName) {
 
   try {
     const preloadResponse = await event.preloadResponse;
-    if (preloadResponse && preloadResponse.ok) {
+    if (preloadResponse && preloadResponse.status === 200) {
       await storeShell(preloadResponse);
       return preloadResponse;
     }
@@ -1009,8 +1009,12 @@ async function appShellResponse(event, cacheName) {
     const networkResponse = await withTimeout(fetch(event.request), SHELL_NETWORK_TIMEOUT_MS);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
       await storeShell(networkResponse);
+      return networkResponse;
     }
-    return networkResponse;
+    // Gateway/proxy/captive-portal errors (5xx, 4xx) must not replace a working
+    // offline shell — serve the cached app instead of a blank error document.
+    console.warn(`[SW] Shell request returned HTTP ${networkResponse && networkResponse.status} — using cache`);
+    return fromCache();
   } catch (err) {
     console.log(`[SW] ${err.message} — serving cached shell for ${event.request.url}`);
     return fromCache();
@@ -1037,7 +1041,10 @@ async function networkFirstWithTimeout(request, cacheName, timeoutMs) {
     const networkResponse = await withTimeout(fetch(request), timeoutMs);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
       await cache.put(request, networkResponse.clone()).catch(() => {});
+      return networkResponse;
     }
+    // A 4xx/5xx shell asset would break the app — prefer the cached copy.
+    if (cached) return cached;
     return networkResponse;
   } catch (err) {
     // Timeout or offline — serve the cached copy instantly
