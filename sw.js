@@ -968,6 +968,19 @@ function withTimeout(promise, timeoutMs) {
 async function appShellResponse(event, cacheName) {
   const cache = await caches.open(cacheName);
 
+  // Only real document navigations may replace the cached shell. The app also
+  // fetches its own URL with a `?_v=` cache-buster to poll for updates — that
+  // request must be served fresh, and must never poison the offline HTML with
+  // a non-HTML or proxy-generated body.
+  const canUpdateShell = event.request.mode === 'navigate';
+
+  const storeShell = async response => {
+    if (!canUpdateShell || !response || !response.ok) return;
+    const type = response.headers.get('content-type') || '';
+    if (!type.includes('text/html')) return;
+    await cache.put(APP_BASE, response.clone()).catch(() => {});
+  };
+
   const fromCache = async () => {
     const exact = await cache.match(event.request, { ignoreSearch: true });
     if (exact) return exact;
@@ -980,7 +993,7 @@ async function appShellResponse(event, cacheName) {
   try {
     const preloadResponse = await event.preloadResponse;
     if (preloadResponse && preloadResponse.ok) {
-      await cache.put(APP_BASE, preloadResponse.clone()).catch(() => {});
+      await storeShell(preloadResponse);
       return preloadResponse;
     }
   } catch {
@@ -995,7 +1008,7 @@ async function appShellResponse(event, cacheName) {
   try {
     const networkResponse = await withTimeout(fetch(event.request), SHELL_NETWORK_TIMEOUT_MS);
     if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'error') {
-      await cache.put(APP_BASE, networkResponse.clone()).catch(() => {});
+      await storeShell(networkResponse);
     }
     return networkResponse;
   } catch (err) {
