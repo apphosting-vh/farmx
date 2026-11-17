@@ -968,11 +968,16 @@ function withTimeout(promise, timeoutMs) {
 async function appShellResponse(event, cacheName) {
   const cache = await caches.open(cacheName);
 
-  // Only real document navigations may replace the cached shell. The app also
-  // fetches its own URL with a `?_v=` cache-buster to poll for updates — that
-  // request must be served fresh, and must never poison the offline HTML with
-  // a non-HTML or proxy-generated body.
-  const canUpdateShell = event.request.mode === 'navigate';
+  // Only real navigations to the app route may replace the cached shell. The
+  // app also fetches its own URL with a `?_v=` cache-buster to poll for
+  // updates — that request must be served fresh, and must never poison the
+  // offline HTML with a non-HTML or proxy-generated body. Deep links and
+  // /offline.html must not overwrite the cached entry point either.
+  let canUpdateShell = false;
+  try {
+    canUpdateShell = event.request.mode === 'navigate' &&
+                     isAppShellPath(new URL(event.request.url).pathname);
+  } catch { /* malformed URL — never update the shell */ }
 
   const storeShell = async response => {
     if (!canUpdateShell || !response || !response.ok) return;
@@ -987,6 +992,9 @@ async function appShellResponse(event, cacheName) {
     const root = (await cache.match(APP_BASE)) ||
                  (await cache.match(`${APP_BASE}index.html`));
     if (root) return root;
+    // Nothing cached for this route — show the precached offline page.
+    const offline = await cache.match(`${APP_BASE}offline.html`);
+    if (offline) return offline;
     return offlinePage();
   };
 
